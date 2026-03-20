@@ -232,6 +232,20 @@ if __name__ == "__main__":
 
     app.bot_data["GROUP_ID"] = int(GROUP_ID)
 
+   if __name__ == "__main__":
+    TOKEN = os.getenv("BOT_TOKEN")
+    GROUP_ID = os.getenv("GROUP_ID")
+
+    if not TOKEN:
+        raise ValueError("❌ BOT_TOKEN no configurado en Railway")
+
+    if not GROUP_ID:
+        raise ValueError("❌ GROUP_ID no configurado en Railway")
+
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.bot_data["GROUP_ID"] = int(GROUP_ID)
+
     # PRIVADO
     app.add_handler(CommandHandler("start", start, filters=filters.ChatType.PRIVATE))
     app.add_handler(CallbackQueryHandler(button_handler))
@@ -241,6 +255,14 @@ if __name__ == "__main__":
             text_handler
         )
     )
+
+    # GRUPO
+    app.add_handler(CommandHandler("proceso", proceso, filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("cerrar", cerrar, filters=filters.ChatType.GROUPS))
+
+    print("🚀 Bot SUNDDE iniciado correctamente")
+
+    app.run_polling()
 
     # GRUPO
     app.add_handler(CommandHandler("proceso", proceso, filters=filters.ChatType.GROUPS))
