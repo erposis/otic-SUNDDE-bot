@@ -20,7 +20,7 @@ ticket_counter = 1
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("Crear Ticket", callback_data="crear")]]
     await update.message.reply_text(
-        "🔵 OTIC – Mesa de Ayuda\n\nPresiona el botón para crear un ticket.",
+        "🔵 OTIC – Soporte Tecnico\n\nPresiona el botón para crear un ticket.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -39,7 +39,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("Acceso", callback_data="Acceso")],
             [InlineKeyboardButton("Red", callback_data="Red")],
             [InlineKeyboardButton("Sistema", callback_data="Sistema")],
-            [InlineKeyboardButton("Correo", callback_data="Correo")]
+            [InlineKeyboardButton("Impresora", callback_data="Impresora")],
+            [InlineKeyboardButton("Correo", callback_data="Correo")],
+            [InlineKeyboardButton("WiFi", callback_data="WiFi")]
         ]
 
         await query.edit_message_text(
@@ -68,12 +70,14 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("Acceso", callback_data="Acceso")],
             [InlineKeyboardButton("Red", callback_data="Red")],
             [InlineKeyboardButton("Sistema", callback_data="Sistema")],
-            [InlineKeyboardButton("Correo", callback_data="Correo")]
+            [InlineKeyboardButton("Impresora", callback_data="Impresora")],
+            [InlineKeyboardButton("Correo", callback_data="Correo")],
+            [InlineKeyboardButton("WiFi", callback_data="WiFi")]
         ]
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="🔵 OTIC – Mesa de Ayuda\n\nSelecciona tipo de problema:",
+            text="🔵 OTIC – Soportr Técnico\n\nSelecciona tipo de problema:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
