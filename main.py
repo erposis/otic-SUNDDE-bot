@@ -29,15 +29,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # MANEJO DE BOTONES
 # ==============================
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global user_states
+async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global ticket_counter
 
-    query = update.callback_query
-    await query.answer()
+    user_id = update.message.from_user.id
 
-    user_id = query.from_user.id
-
-    if query.data == "crear":
+    if user_id not in user_states:
         user_states[user_id] = {"step": "tipo"}
 
         keyboard = [
@@ -47,36 +44,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("Correo", callback_data="Correo")]
         ]
 
-        await query.edit_message_text(
-            "Selecciona tipo de problema:",
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="🔵 OTIC – Mesa de Ayuda\n\nSelecciona tipo de problema:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-
-    else:
-        user_states[user_id]["tipo"] = query.data
-        user_states[user_id]["step"] = "piso"
-
-        await query.edit_message_text("¿En qué piso te encuentras?")
-
-
-# ==============================
-# MANEJO DE TEXTO
-# ==============================
-
-async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global ticket_counter
-
-    user_id = update.message.from_user.id
-
-   if user_id not in user_states:
-    user_states[user_id] = {"step": "tipo"}
-
-    keyboard = [
-        [InlineKeyboardButton("Acceso", callback_data="Acceso")],
-        [InlineKeyboardButton("Red", callback_data="Red")],
-        [InlineKeyboardButton("Sistema", callback_data="Sistema")],
-        [InlineKeyboardButton("Correo", callback_data="Correo")]
-    ]
+        return
 
     step = user_states[user_id]["step"]
 
@@ -112,7 +85,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         ticket_counter += 1
         del user_states[user_id]
-
 
 # ==============================
 # INICIO SEGURO (ANTI-CRASH)
