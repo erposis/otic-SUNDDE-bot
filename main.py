@@ -276,14 +276,30 @@ if __name__ == "__main__":
     TOKEN = os.getenv("BOT_TOKEN")
     GROUP_ID = os.getenv("GROUP_ID")
 
+    if not TOKEN:
+        raise ValueError("BOT_TOKEN no configurado")
+
+    if not GROUP_ID:
+        raise ValueError("GROUP_ID no configurado")
+
     app = ApplicationBuilder().token(TOKEN).build()
     app.bot_data["GROUP_ID"] = int(GROUP_ID)
 
+    # ===== COMANDOS PRIMERO =====
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     app.add_handler(CommandHandler("proceso", proceso))
     app.add_handler(CommandHandler("cerrar", cerrar))
+
+    # ===== BOTONES =====
+    app.add_handler(CallbackQueryHandler(button_handler))
+
+    # ===== MENSAJES PRIVADOS =====
+    app.add_handler(
+        MessageHandler(
+            filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND,
+            text_handler
+        )
+    )
 
     print("🚀 BOT LISTO")
 
