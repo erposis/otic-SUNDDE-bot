@@ -179,29 +179,12 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("PROCESO RECIBIDO")
 
-    if not context.args:
-        await update.message.reply_text("SIN ARGUMENTO")
+    try:
+        conn = get_connection()
+        await update.message.reply_text("CONEXION OK")
+    except Exception as e:
+        await update.message.reply_text(f"ERROR DB: {e}")
         return
-
-    ticket_id = int(context.args[0])
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        "SELECT message_id FROM tickets WHERE id=%s",
-        (ticket_id,)
-    )
-
-    result = cursor.fetchone()
-
-    if not result:
-        await update.message.reply_text("TICKET NO EXISTE EN DB")
-        return
-
-    message_id = result[0]
-
-    await update.message.reply_text(f"message_id = {message_id}")
 
 # ==============================
 # CERRAR (GRUPO)
