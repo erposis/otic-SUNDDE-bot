@@ -279,4 +279,4 @@ if __name__ == "__main__":
 
     print("🚀 BOT LISTO")
 
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
