@@ -176,46 +176,31 @@ Creado: {now.strftime("%d/%m/%Y %H:%M")}
 # ==============================
 
 async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("COMANDO PROCESO RECIBIDO")
+
+    await update.message.reply_text("PROCESO RECIBIDO")
+
     if not context.args:
         return
 
     ticket_id = int(context.args[0])
-    tecnico = update.message.from_user.full_name
-    now = datetime.now()
 
     conn = get_connection()
     cursor = conn.cursor()
 
-    cursor.execute("""
-        UPDATE tickets
-        SET estado='EN PROCESO',
-            asignado_a=%s,
-            fecha_actualizacion=%s
-        WHERE id=%s
-        RETURNING message_id;
-    """, (tecnico, now, ticket_id))
+    cursor.execute(
+        "SELECT message_id FROM tickets WHERE id=%s",
+        (ticket_id,)
+    )
 
     result = cursor.fetchone()
 
     if not result:
-        await update.message.reply_text("Ticket no encontrado.")
-        cursor.close()
-        conn.close()
+        await update.message.reply_text("No existe ticket.")
         return
 
     message_id = result[0]
 
-    await context.bot.edit_message_text(
-        chat_id=update.effective_chat.id,
-        message_id=message_id,
-        text=f"🟡 TICKET #{ticket_id}\nEstado: EN PROCESO\nAsignado a: {tecnico}"
-    )
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-
+    await update.message.reply_text(f"Message ID: {message_id}")
 
 # ==============================
 # CERRAR (GRUPO)
