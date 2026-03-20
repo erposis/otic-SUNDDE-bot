@@ -149,7 +149,19 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     tickets[ticket_id]["status"] = "EN PROCESO"
-    await update.message.reply_text(f"🛠 Ticket #{ticket_id} marcado EN PROCESO.")
+
+    user_id = tickets[ticket_id]["user_id"]
+
+    # Mensaje privado al usuario
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=f"🛠 Tu ticket #{ticket_id} está ahora EN PROCESO."
+    )
+
+    # Mensaje en el grupo
+    await update.message.reply_text(
+        f"🛠 Ticket #{ticket_id} marcado EN PROCESO."
+    )
 
 async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
