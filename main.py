@@ -104,10 +104,15 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_states[user_id]["step"] = "descripcion"
         await update.message.reply_text("Describe tu requerimiento brevemente:")
 
-    elif step == "descripcion":
-current_time = datetime.now().strftime("%d/%m/%Y %H:%M")
+  elif step == "descripcion":
+    user_states[user_id]["descripcion"] = update.message.text
 
-ticket_text = f"""
+    from datetime import datetime
+    current_time = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    group_id = context.application.bot_data["GROUP_ID"]
+
+    ticket_text = f"""
 🆕 TICKET #{ticket_counter}
 Estado: 🟢 ABIERTO
 Creado: {current_time}
@@ -121,19 +126,19 @@ Creado: {current_time}
 {user_states[user_id]['descripcion']}
 """
 
-msg = await context.bot.send_message(chat_id=group_id, text=ticket_text)
+    msg = await context.bot.send_message(chat_id=group_id, text=ticket_text)
 
-tickets[ticket_counter] = {
-    "user_id": user_id,
-    "message_id": msg.message_id,
-    "status": "ABIERTO",
-    "base_text": ticket_text
-}
+    tickets[ticket_counter] = {
+        "user_id": user_id,
+        "message_id": msg.message_id,
+        "status": "ABIERTO",
+        "base_text": ticket_text
+    }
 
-        await update.message.reply_text(f"✅ Tu ticket #{ticket_counter} fue creado.")
+    await update.message.reply_text(f"✅ Tu ticket #{ticket_counter} fue creado.")
 
-        ticket_counter += 1
-        del user_states[user_id]
+    ticket_counter += 1
+    del user_states[user_id]
 
 # ==============================
 # COMANDOS DESDE GRUPO
