@@ -68,9 +68,15 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.message.from_user.id
 
-    if user_id not in user_states:
-        await update.message.reply_text("Usa /start para iniciar un ticket.")
-        return
+   if user_id not in user_states:
+    user_states[user_id] = {"step": "tipo"}
+
+    keyboard = [
+        [InlineKeyboardButton("Acceso", callback_data="Acceso")],
+        [InlineKeyboardButton("Red", callback_data="Red")],
+        [InlineKeyboardButton("Sistema", callback_data="Sistema")],
+        [InlineKeyboardButton("Correo", callback_data="Correo")]
+    ]
 
     step = user_states[user_id]["step"]
 
