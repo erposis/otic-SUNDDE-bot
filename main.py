@@ -1,66 +1,65 @@
 import os
-from datetime import datetime
-from urllib.parse import urlparse
-
 import psycopg2
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
-    ContextTypes,
     filters,
+    ContextTypes,
 )
 
 # ==============================
-# CONEXIÓN DB
+# BASE DE DATOS
 # ==============================
 
 def get_connection():
-    url = os.getenv("DATABASE_URL")
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise ValueError("DATABASE_URL no configurada en el BOT")
 
-    if not url:
-        raise ValueError("DATABASE_URL no configurada en el servicio del BOT")
+    return psycopg2.connect(database_url)
 
-    result = urlparse(url)
-
-    return psycopg2.connect(
-        database=result.path[1:],
-        user=result.username,
-        password=result.password,
-        host=result.hostname,
-        port=result.port,
-    )
 
 # ==============================
-# ESTADOS TEMPORALES
+# VARIABLES EN MEMORIA
 # ==============================
 
 user_states = {}
 
+
 # ==============================
-# START
+# START (PRIVADO)
 # ==============================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if update.effective_chat.type != "private":
+        return
+
     keyboard = [[InlineKeyboardButton("Crear Ticket", callback_data="crear")]]
+
     await update.message.reply_text(
         "🔵 SUNDDE – Soporte Técnico\n\nPresiona el botón para crear un ticket.",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
+
 
 # ==============================
 # BOTONES
 # ==============================
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     query = update.callback_query
     await query.answer()
 
     user_id = query.from_user.id
 
     if query.data == "crear":
+
         user_states[user_id] = {"step": "tipo"}
 
         keyboard = [
@@ -69,17 +68,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("Sistema", callback_data="Sistema")],
             [InlineKeyboardButton("Impresora", callback_data="Impresora")],
             [InlineKeyboardButton("Correo", callback_data="Correo")],
-            [InlineKeyboardButton("WiFi", callback_data="WiFi")],
+            [InlineKeyboardButton("WiFi", callback_data="WiFi")]
         ]
 
         await query.edit_message_text(
-            "Selecciona tipo de Caso:",
-            reply_markup=InlineKeyboardMarkup(keyboard),
+            "Selecciona tipo de caso:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
     else:
         user_states[user_id]["tipo"] = query.data
         user_states[user_id]["step"] = "piso"
-        await query.edit_message_text("¿En cuál Piso y Unidad?")
+        await query.edit_message_text("¿En qué piso y unidad?")
+
 
 # ==============================
 # FLUJO PRIVADO
@@ -93,11 +94,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
 
     if user_id not in user_states:
-        keyboard = [[InlineKeyboardButton("Crear Ticket", callback_data="crear")]]
-        await update.message.reply_text(
-            "🔵 SUNDDE – Soporte Técnico\n\nPresiona el botón para crear un ticket.",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-        )
+        await update.message.reply_text("Usa /start para iniciar un ticket.")
         return
 
     step = user_states[user_id]["step"]
@@ -105,18 +102,17 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if step == "piso":
         user_states[user_id]["piso"] = update.message.text
         user_states[user_id]["step"] = "sistema"
-        await update.message.reply_text("¿Qué Dispositivo o Sistema está afectado?")
+        await update.message.reply_text("¿Qué sistema o dispositivo está afectado?")
 
     elif step == "sistema":
         user_states[user_id]["sistema"] = update.message.text
         user_states[user_id]["step"] = "descripcion"
-        await update.message.reply_text("Describe tu requerimiento brevemente:")
+        await update.message.reply_text("Describe el problema brevemente:")
 
     elif step == "descripcion":
 
         user_states[user_id]["descripcion"] = update.message.text
         current_time = datetime.now()
-        group_id = context.application.bot_data["GROUP_ID"]
 
         conn = get_connection()
         cursor = conn.cursor()
@@ -133,7 +129,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 asignado_a,
                 fecha_creacion,
                 fecha_actualizacion
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            )
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             RETURNING id;
         """, (
             user_id,
@@ -145,14 +142,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "ABIERTO",
             None,
             current_time,
-            current_time,
+            current_time
         ))
 
         ticket_id = cursor.fetchone()[0]
 
-        conn.commit()
-        cursor.close()
-        conn.close()
+        group_id = context.application.bot_data["GROUP_ID"]
 
         ticket_text = f"""
 🆕 TICKET #{ticket_id}
@@ -168,26 +163,34 @@ Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
 {user_states[user_id]['descripcion']}
 """
 
-        await context.bot.send_message(chat_id=group_id, text=ticket_text)
+        msg = await context.bot.send_message(chat_id=group_id, text=ticket_text)
+
+        cursor.execute("""
+            UPDATE tickets
+            SET message_id = %s
+            WHERE id = %s
+        """, (msg.message_id, ticket_id))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
         await update.message.reply_text(f"✅ Tu ticket #{ticket_id} fue creado.")
 
         del user_states[user_id]
 
+
 # ==============================
-# PROCESO
+# CAMBIAR ESTADO (GRUPO)
 # ==============================
 
 async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    if update.effective_chat.type == "private":
-        return
-
     if not context.args:
-        await update.message.reply_text("Usa: /proceso <numero_ticket>")
         return
 
     ticket_id = int(context.args[0])
-    tecnico = update.effective_user.full_name
+    tecnico = update.message.from_user.full_name
     now = datetime.now()
 
     conn = get_connection()
@@ -195,12 +198,13 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     cursor.execute("""
         UPDATE tickets
-        SET estado = %s,
-            asignado_a = %s,
-            fecha_actualizacion = %s
-        WHERE id = %s
-        RETURNING usuario_id;
-    """, ("EN PROCESO", tecnico, now, ticket_id))
+        SET estado='EN PROCESO',
+            asignado_a=%s,
+            fecha_actualizacion=%s
+        WHERE id=%s
+        RETURNING message_id, usuario_nombre, tipo, piso, sistema,
+                  descripcion, fecha_creacion;
+    """, (tecnico, now, ticket_id))
 
     result = cursor.fetchone()
 
@@ -210,34 +214,50 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         return
 
-    usuario_id = result[0]
+    (
+        message_id,
+        usuario,
+        tipo,
+        piso,
+        sistema,
+        descripcion,
+        fecha_creacion
+    ) = result
+
+    new_text = f"""
+🆕 TICKET #{ticket_id}
+Estado: 🟡 EN PROCESO
+Creado: {fecha_creacion.strftime("%d/%m/%Y %H:%M")}
+Actualizado: {now.strftime("%d/%m/%Y %H:%M")}
+Asignado a: {tecnico}
+
+👤 Usuario: {usuario}
+🧩 Tipo: {tipo}
+🏢 Piso: {piso}
+🖥 Sistema: {sistema}
+
+📝 Descripción:
+{descripcion}
+"""
+
+    await context.bot.edit_message_text(
+        chat_id=update.effective_chat.id,
+        message_id=message_id,
+        text=new_text
+    )
 
     conn.commit()
     cursor.close()
     conn.close()
 
-    await update.message.reply_text(f"🛠 Ticket #{ticket_id} en PROCESO.")
-
-    await context.bot.send_message(
-        chat_id=usuario_id,
-        text=f"🛠 Tu ticket #{ticket_id} está EN PROCESO."
-    )
-
-# ==============================
-# CERRAR
-# ==============================
 
 async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    if update.effective_chat.type == "private":
-        return
-
     if not context.args:
-        await update.message.reply_text("Usa: /cerrar <numero_ticket>")
         return
 
     ticket_id = int(context.args[0])
-    tecnico = update.effective_user.full_name
+    tecnico = update.message.from_user.full_name
     now = datetime.now()
 
     conn = get_connection()
@@ -245,12 +265,11 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     cursor.execute("""
         UPDATE tickets
-        SET estado = %s,
-            asignado_a = %s,
-            fecha_actualizacion = %s
-        WHERE id = %s
-        RETURNING usuario_id;
-    """, ("CERRADO", tecnico, now, ticket_id))
+        SET estado='CERRADO',
+            fecha_actualizacion=%s
+        WHERE id=%s
+        RETURNING message_id, usuario_id;
+    """, (now, ticket_id))
 
     result = cursor.fetchone()
 
@@ -260,18 +279,23 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         return
 
-    usuario_id = result[0]
+    message_id, usuario_id = result
 
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    await update.message.reply_text(f"🔒 Ticket #{ticket_id} cerrado.")
+    await context.bot.edit_message_text(
+        chat_id=update.effective_chat.id,
+        message_id=message_id,
+        text=f"🔴 TICKET #{ticket_id}\nEstado: CERRADO\nCerrado por: {tecnico}\nFecha: {now.strftime('%d/%m/%Y %H:%M')}"
+    )
 
     await context.bot.send_message(
         chat_id=usuario_id,
         text=f"✅ Tu ticket #{ticket_id} fue RESUELTO."
     )
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
 
 # ==============================
 # MAIN
@@ -292,37 +316,15 @@ if __name__ == "__main__":
 
     app.bot_data["GROUP_ID"] = int(GROUP_ID)
 
-    # Crear tabla si no existe
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS tickets (
-            id SERIAL PRIMARY KEY,
-            usuario_id BIGINT,
-            usuario_nombre TEXT,
-            tipo TEXT,
-            piso TEXT,
-            sistema TEXT,
-            descripcion TEXT,
-            estado TEXT,
-            asignado_a TEXT,
-            fecha_creacion TIMESTAMP,
-            fecha_actualizacion TIMESTAMP
-        );
-    """)
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    # Handlers
+    # PRIVADO
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+
+    # GRUPO
     app.add_handler(CommandHandler("proceso", proceso))
     app.add_handler(CommandHandler("cerrar", cerrar))
 
-    print("🚀 Bot SUNDDE institucional iniciado")
+    print("🚀 Bot institucional iniciado")
 
     app.run_polling()
