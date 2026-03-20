@@ -20,7 +20,7 @@ ticket_counter = 1
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("Crear Ticket", callback_data="crear")]]
     await update.message.reply_text(
-        "🔵 OTIC – Soporte Técnico\n\nPresiona el botón para crear un ticket.",
+        "🔵 SUNDDE – Soporte Técnico\n\nPresiona el botón para crear un ticket.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -45,7 +45,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
 
         await query.edit_message_text(
-            "Selecciona tipo de problema:",
+            "Selecciona tipo de Caso:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
@@ -53,7 +53,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_states[user_id]["tipo"] = query.data
         user_states[user_id]["step"] = "piso"
 
-        await query.edit_message_text("¿En qué piso te encuentras?")
+        await query.edit_message_text("¿En cual Piso y Unidad?")
 # ==============================
 # MANEJO DE BOTONES
 # ==============================
@@ -77,7 +77,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="🔵 OTIC – Soportr Técnico\n\nSelecciona tipo de problema:",
+            text="🔵 SUNDDE – Soportr Técnico\n\nSelecciona tipo de problema:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
@@ -87,12 +87,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if step == "piso":
         user_states[user_id]["piso"] = update.message.text
         user_states[user_id]["step"] = "sistema"
-        await update.message.reply_text("¿Qué sistema está afectado?")
+        await update.message.reply_text("¿Qué Dispositivo o Sistema está afectado?")
 
     elif step == "sistema":
         user_states[user_id]["sistema"] = update.message.text
         user_states[user_id]["step"] = "descripcion"
-        await update.message.reply_text("Describe el problema brevemente:")
+        await update.message.reply_text("Describe tu requerimiento brevemente:")
 
     elif step == "descripcion":
         user_states[user_id]["descripcion"] = update.message.text
