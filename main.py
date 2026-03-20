@@ -180,6 +180,7 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("PROCESO RECIBIDO")
 
     if not context.args:
+        await update.message.reply_text("SIN ARGUMENTO")
         return
 
     ticket_id = int(context.args[0])
@@ -195,12 +196,12 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = cursor.fetchone()
 
     if not result:
-        await update.message.reply_text("No existe ticket.")
+        await update.message.reply_text("TICKET NO EXISTE EN DB")
         return
 
     message_id = result[0]
 
-    await update.message.reply_text(f"Message ID: {message_id}")
+    await update.message.reply_text(f"message_id = {message_id}")
 
 # ==============================
 # CERRAR (GRUPO)
