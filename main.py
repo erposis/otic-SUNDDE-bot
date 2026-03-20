@@ -179,7 +179,21 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("PROCESO RECIBIDO")
 
-    await update.message.reply_text(f"ARGS = {context.args}")
+    ticket_id = int(context.args[0])
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, message_id FROM tickets WHERE id=%s
+    """, (ticket_id,))
+
+    result = cursor.fetchone()
+
+    await update.message.reply_text(f"DB RESULT = {result}")
+
+    cursor.close()
+    conn.close()
 # ==============================
 # CERRAR (GRUPO)
 # ==============================
