@@ -316,15 +316,18 @@ if __name__ == "__main__":
 
     app.bot_data["GROUP_ID"] = int(GROUP_ID)
 
-    # PRIVADO
+   # PRIVADO
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+    app.add_handler(
+    MessageHandler(
+        filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND,
+        text_handler
+        )
+    )
 
     # GRUPO
-    app.add_handler(CommandHandler("proceso", proceso))
-    app.add_handler(CommandHandler("cerrar", cerrar))
-
-    print("🚀 Bot institucional iniciado")
-
+    app.add_handler(CommandHandler("proceso", proceso, filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("cerrar", cerrar, filters=filters.ChatType.GROUPS))
+    
     app.run_polling()
