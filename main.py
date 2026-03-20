@@ -18,29 +18,23 @@ from telegram.ext import (
 def get_connection():
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
-        raise ValueError("DATABASE_URL no configurada en el BOT")
-
+        raise ValueError("DATABASE_URL no configurada")
     return psycopg2.connect(database_url)
 
 
 # ==============================
-# VARIABLES EN MEMORIA
+# VARIABLES TEMPORALES
 # ==============================
 
 user_states = {}
 
 
 # ==============================
-# START (PRIVADO)
+# START
 # ==============================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    if update.effective_chat.type != "private":
-        return
-
     keyboard = [[InlineKeyboardButton("Crear Ticket", callback_data="crear")]]
-
     await update.message.reply_text(
         "🔵 SUNDDE – Soporte Técnico\n\nPresiona el botón para crear un ticket.",
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -52,14 +46,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==============================
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     query = update.callback_query
     await query.answer()
 
     user_id = query.from_user.id
 
     if query.data == "crear":
-
         user_states[user_id] = {"step": "tipo"}
 
         keyboard = [
@@ -112,7 +104,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif step == "descripcion":
 
         user_states[user_id]["descripcion"] = update.message.text
-        current_time = datetime.now()
+        now = datetime.now()
 
         conn = get_connection()
         cursor = conn.cursor()
@@ -141,18 +133,18 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_states[user_id]["descripcion"],
             "ABIERTO",
             None,
-            current_time,
-            current_time
+            now,
+            now
         ))
 
         ticket_id = cursor.fetchone()[0]
 
         group_id = context.application.bot_data["GROUP_ID"]
 
-        ticket_text = f"""
+        text = f"""
 🆕 TICKET #{ticket_id}
 Estado: 🟢 ABIERTO
-Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
+Creado: {now.strftime("%d/%m/%Y %H:%M")}
 
 👤 Usuario: {update.message.from_user.full_name}
 🧩 Tipo: {user_states[user_id]['tipo']}
@@ -163,13 +155,12 @@ Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
 {user_states[user_id]['descripcion']}
 """
 
-        msg = await context.bot.send_message(chat_id=group_id, text=ticket_text)
+        msg = await context.bot.send_message(chat_id=group_id, text=text)
 
-        cursor.execute("""
-            UPDATE tickets
-            SET message_id = %s
-            WHERE id = %s
-        """, (msg.message_id, ticket_id))
+        cursor.execute(
+            "UPDATE tickets SET message_id=%s WHERE id=%s",
+            (msg.message_id, ticket_id)
+        )
 
         conn.commit()
         cursor.close()
@@ -181,7 +172,7 @@ Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
 
 
 # ==============================
-# CAMBIAR ESTADO (GRUPO)
+# PROCESO (GRUPO)
 # ==============================
 
 async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -202,8 +193,7 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
             asignado_a=%s,
             fecha_actualizacion=%s
         WHERE id=%s
-        RETURNING message_id, usuario_nombre, tipo, piso, sistema,
-                  descripcion, fecha_creacion;
+        RETURNING message_id;
     """, (tecnico, now, ticket_id))
 
     result = cursor.fetchone()
@@ -214,42 +204,22 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         return
 
-    (
-        message_id,
-        usuario,
-        tipo,
-        piso,
-        sistema,
-        descripcion,
-        fecha_creacion
-    ) = result
-
-    new_text = f"""
-🆕 TICKET #{ticket_id}
-Estado: 🟡 EN PROCESO
-Creado: {fecha_creacion.strftime("%d/%m/%Y %H:%M")}
-Actualizado: {now.strftime("%d/%m/%Y %H:%M")}
-Asignado a: {tecnico}
-
-👤 Usuario: {usuario}
-🧩 Tipo: {tipo}
-🏢 Piso: {piso}
-🖥 Sistema: {sistema}
-
-📝 Descripción:
-{descripcion}
-"""
+    message_id = result[0]
 
     await context.bot.edit_message_text(
         chat_id=update.effective_chat.id,
         message_id=message_id,
-        text=new_text
+        text=f"🟡 TICKET #{ticket_id}\nEstado: EN PROCESO\nAsignado a: {tecnico}"
     )
 
     conn.commit()
     cursor.close()
     conn.close()
 
+
+# ==============================
+# CERRAR (GRUPO)
+# ==============================
 
 async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -284,7 +254,7 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.edit_message_text(
         chat_id=update.effective_chat.id,
         message_id=message_id,
-        text=f"🔴 TICKET #{ticket_id}\nEstado: CERRADO\nCerrado por: {tecnico}\nFecha: {now.strftime('%d/%m/%Y %H:%M')}"
+        text=f"🔴 TICKET #{ticket_id}\nEstado: CERRADO\nCerrado por: {tecnico}"
     )
 
     await context.bot.send_message(
@@ -306,28 +276,15 @@ if __name__ == "__main__":
     TOKEN = os.getenv("BOT_TOKEN")
     GROUP_ID = os.getenv("GROUP_ID")
 
-    if not TOKEN:
-        raise ValueError("BOT_TOKEN no configurado")
-
-    if not GROUP_ID:
-        raise ValueError("GROUP_ID no configurado")
-
     app = ApplicationBuilder().token(TOKEN).build()
-
     app.bot_data["GROUP_ID"] = int(GROUP_ID)
 
-   # PRIVADO
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(
-    MessageHandler(
-        filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND,
-        text_handler
-        )
-    )
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+    app.add_handler(CommandHandler("proceso", proceso))
+    app.add_handler(CommandHandler("cerrar", cerrar))
 
-    # GRUPO
-    app.add_handler(CommandHandler("proceso", proceso, filters=filters.ChatType.GROUPS))
-    app.add_handler(CommandHandler("cerrar", cerrar, filters=filters.ChatType.GROUPS))
-    
+    print("🚀 BOT LISTO")
+
     app.run_polling()
