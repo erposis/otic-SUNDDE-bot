@@ -24,7 +24,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global user_states
 
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+
+    if query.data == "crear":
+        user_states[user_id] = {"step": "tipo"}
+
+        keyboard = [
+            [InlineKeyboardButton("Acceso", callback_data="Acceso")],
+            [InlineKeyboardButton("Red", callback_data="Red")],
+            [InlineKeyboardButton("Sistema", callback_data="Sistema")],
+            [InlineKeyboardButton("Correo", callback_data="Correo")]
+        ]
+
+        await query.edit_message_text(
+            "Selecciona tipo de problema:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    else:
+        user_states[user_id]["tipo"] = query.data
+        user_states[user_id]["step"] = "piso"
+
+        await query.edit_message_text("¿En qué piso te encuentras?")
 # ==============================
 # MANEJO DE BOTONES
 # ==============================
