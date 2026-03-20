@@ -1,4 +1,6 @@
 import os
+import psycopg2
+from urllib.parse import urlparse
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -17,7 +19,20 @@ from telegram.ext import (
 user_states = {}
 ticket_counter = 1
 tickets = {}
+def get_connection():
+    url = os.getenv("DATABASE_URL")
+    result = urlparse(url)
 
+    conn = psycopg2.connect(
+        database=result.path[1:],
+        user=result.username,
+        password=result.password,
+        host=result.hostname,
+        port=result.port
+    )
+
+    return conn
+    
 # ==============================
 # START
 # ==============================
@@ -241,5 +256,32 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("cerrar", cerrar))
 
     print("🚀 Bot SUNDDE iniciado correctamente")
+    
+    # ==============================
+    # CREAR TABLA SI NO EXISTE
+    # ==============================
 
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS tickets (
+        id SERIAL PRIMARY KEY,
+        usuario_id BIGINT,
+        usuario_nombre TEXT,
+        tipo TEXT,
+        piso TEXT,
+        sistema TEXT,
+        descripcion TEXT,
+        estado TEXT,
+        asignado_a TEXT,
+        fecha_creacion TIMESTAMP,
+        fecha_actualizacion TIMESTAMP
+    );
+    """)
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
     app.run_polling()
