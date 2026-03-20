@@ -161,9 +161,9 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Ticket no encontrado.")
         return
 
-    tickets[ticket_id]["status"] = "CERRADO"
-
     user_id = tickets[ticket_id]["user_id"]
+
+    await update.message.reply_text(f"DEBUG user_id: {user_id}")
 
     await context.bot.send_message(
         chat_id=user_id,
