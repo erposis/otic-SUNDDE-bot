@@ -1,42 +1,71 @@
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-
-TOKEN = os.getenv("BOT_TOKEN")
-GRUPO_ID = int(os.getenv("GROUP_ID"))
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+)
 
 user_states = {}
 ticket_counter = 1
 
+
+# ==============================
+# COMANDO START
+# ==============================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("Crear Ticket", callback_data="crear")]]
     await update.message.reply_text(
-        "🔵 OTIC – Mesa de Ayuda",
+        "🔵 OTIC – Mesa de Ayuda\n\nPresiona el botón para crear un ticket.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
+# ==============================
+# MANEJO DE BOTONES
+# ==============================
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global user_states
+
     query = update.callback_query
     await query.answer()
 
+    user_id = query.from_user.id
+
     if query.data == "crear":
-        user_states[query.from_user.id] = {"step": "tipo"}
+        user_states[user_id] = {"step": "tipo"}
+
         keyboard = [
             [InlineKeyboardButton("Acceso", callback_data="Acceso")],
             [InlineKeyboardButton("Red", callback_data="Red")],
             [InlineKeyboardButton("Sistema", callback_data="Sistema")],
             [InlineKeyboardButton("Correo", callback_data="Correo")]
         ]
-        await query.edit_message_text("Selecciona tipo de problema:",
-                                      reply_markup=InlineKeyboardMarkup(keyboard))
+
+        await query.edit_message_text(
+            "Selecciona tipo de problema:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
     else:
-        user_states[query.from_user.id]["tipo"] = query.data
-        user_states[query.from_user.id]["step"] = "piso"
+        user_states[user_id]["tipo"] = query.data
+        user_states[user_id]["step"] = "piso"
+
         await query.edit_message_text("¿En qué piso te encuentras?")
+
+
+# ==============================
+# MANEJO DE TEXTO
+# ==============================
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global ticket_counter
+
     user_id = update.message.from_user.id
 
     if user_id not in user_states:
@@ -58,6 +87,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif step == "descripcion":
         user_states[user_id]["descripcion"] = update.message.text
 
+        group_id = context.application.bot_data["GROUP_ID"]
+
         ticket_text = f"""
 🆕 TICKET #{ticket_counter}
 
@@ -70,15 +101,36 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 {user_states[user_id]['descripcion']}
 """
 
-        await context.bot.send_message(chat_id=GRUPO_ID, text=ticket_text)
-        await update.message.reply_text(f"Tu ticket #{ticket_counter} fue creado.")
+        await context.bot.send_message(chat_id=group_id, text=ticket_text)
+        await update.message.reply_text(f"✅ Tu ticket #{ticket_counter} fue creado.")
 
         ticket_counter += 1
         del user_states[user_id]
 
-app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CallbackQueryHandler(button_handler))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-app.run_polling()
+# ==============================
+# INICIO SEGURO (ANTI-CRASH)
+# ==============================
+
+if __name__ == "__main__":
+    TOKEN = os.getenv("BOT_TOKEN")
+    GROUP_ID = os.getenv("GROUP_ID")
+
+    if not TOKEN:
+        raise ValueError("❌ BOT_TOKEN no configurado en Railway")
+
+    if not GROUP_ID:
+        raise ValueError("❌ GROUP_ID no configurado en Railway")
+
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    # Guardamos el GROUP_ID de forma segura
+    app.bot_data["GROUP_ID"] = int(GROUP_ID)
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
+
+    print("🚀 Bot OTIC iniciado correctamente")
+
+    app.run_polling()
