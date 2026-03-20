@@ -109,16 +109,61 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_states[user_id]["step"] = "descripcion"
         await update.message.reply_text("Describe tu requerimiento brevemente:")
 
-    elif step == "descripcion":
-        user_states[user_id]["descripcion"] = update.message.text
+elif step == "descripcion":
+    user_states[user_id]["descripcion"] = update.message.text
 
-        current_time = datetime.now().strftime("%d/%m/%Y %H:%M")
-        group_id = context.application.bot_data["GROUP_ID"]
+    current_time = datetime.now()
 
-        ticket_text = f"""
-🆕 TICKET #{ticket_counter}
+    group_id = context.application.bot_data["GROUP_ID"]
+
+    # ==============================
+    # INSERTAR EN BASE DE DATOS
+    # ==============================
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO tickets (
+            usuario_id,
+            usuario_nombre,
+            tipo,
+            piso,
+            sistema,
+            descripcion,
+            estado,
+            asignado_a,
+            fecha_creacion,
+            fecha_actualizacion
+        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        RETURNING id;
+    """, (
+        user_id,
+        update.message.from_user.full_name,
+        user_states[user_id]["tipo"],
+        user_states[user_id]["piso"],
+        user_states[user_id]["sistema"],
+        user_states[user_id]["descripcion"],
+        "ABIERTO",
+        None,
+        current_time,
+        current_time
+    ))
+
+    ticket_id = cursor.fetchone()[0]
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    # ==============================
+    # ENVIAR MENSAJE AL GRUPO
+    # ==============================
+
+    ticket_text = f"""
+🆕 TICKET #{ticket_id}
 Estado: 🟢 ABIERTO
-Creado: {current_time}
+Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
 
 👤 Usuario: {update.message.from_user.full_name}
 🧩 Tipo: {user_states[user_id]['tipo']}
@@ -129,19 +174,11 @@ Creado: {current_time}
 {user_states[user_id]['descripcion']}
 """
 
-        msg = await context.bot.send_message(chat_id=group_id, text=ticket_text)
+    msg = await context.bot.send_message(chat_id=group_id, text=ticket_text)
 
-        tickets[ticket_counter] = {
-            "user_id": user_id,
-            "message_id": msg.message_id,
-            "status": "ABIERTO",
-            "base_text": ticket_text
-        }
+    await update.message.reply_text(f"✅ Tu ticket #{ticket_id} fue creado.")
 
-        await update.message.reply_text(f"✅ Tu ticket #{ticket_counter} fue creado.")
-
-        ticket_counter += 1
-        del user_states[user_id]
+    del user_states[user_id]
 
 # ==============================
 # CAMBIAR A PROCESO
