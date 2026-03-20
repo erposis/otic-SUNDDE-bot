@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -104,13 +105,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Describe tu requerimiento brevemente:")
 
     elif step == "descripcion":
-        user_states[user_id]["descripcion"] = update.message.text
+current_time = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-        group_id = context.application.bot_data["GROUP_ID"]
-
-        ticket_text = f"""
+ticket_text = f"""
 🆕 TICKET #{ticket_counter}
-Estado: ABIERTO
+Estado: 🟢 ABIERTO
+Creado: {current_time}
 
 👤 Usuario: {update.message.from_user.full_name}
 🧩 Tipo: {user_states[user_id]['tipo']}
@@ -121,13 +121,14 @@ Estado: ABIERTO
 {user_states[user_id]['descripcion']}
 """
 
-        msg = await context.bot.send_message(chat_id=group_id, text=ticket_text)
+msg = await context.bot.send_message(chat_id=group_id, text=ticket_text)
 
-        tickets[ticket_counter] = {
-            "user_id": user_id,
-            "message_id": msg.message_id,
-            "status": "ABIERTO"
-        }
+tickets[ticket_counter] = {
+    "user_id": user_id,
+    "message_id": msg.message_id,
+    "status": "ABIERTO",
+    "base_text": ticket_text
+}
 
         await update.message.reply_text(f"✅ Tu ticket #{ticket_counter} fue creado.")
 
@@ -148,20 +149,30 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Ticket no encontrado.")
         return
 
+    current_time = datetime.now().strftime("%d/%m/%Y %H:%M")
+    tecnico = update.effective_user.full_name
+
     tickets[ticket_id]["status"] = "EN PROCESO"
+
+    new_text = tickets[ticket_id]["base_text"].replace(
+        "🟢 ABIERTO",
+        f"🟡 EN PROCESO\nAsignado a: {tecnico}\nActualizado: {current_time}"
+    )
+
+    await context.bot.edit_message_text(
+        chat_id=update.effective_chat.id,
+        message_id=tickets[ticket_id]["message_id"],
+        text=new_text
+    )
 
     user_id = tickets[ticket_id]["user_id"]
 
-    # Mensaje privado al usuario
     await context.bot.send_message(
         chat_id=user_id,
         text=f"🛠 Tu ticket #{ticket_id} está ahora EN PROCESO."
     )
 
-    # Mensaje en el grupo
-    await update.message.reply_text(
-        f"🛠 Ticket #{ticket_id} marcado EN PROCESO."
-    )
+    await update.message.reply_text(f"🛠 Ticket #{ticket_id} marcado EN PROCESO.")
 
 async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -173,11 +184,27 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Ticket no encontrado.")
         return
 
+    current_time = datetime.now().strftime("%d/%m/%Y %H:%M")
+    tecnico = update.effective_user.full_name
+
+    tickets[ticket_id]["status"] = "CERRADO"
+
+    new_text = tickets[ticket_id]["base_text"].replace(
+        "🟢 ABIERTO",
+        f"🔴 CERRADO\nCerrado por: {tecnico}\nActualizado: {current_time}"
+    )
+
+    await context.bot.edit_message_text(
+        chat_id=update.effective_chat.id,
+        message_id=tickets[ticket_id]["message_id"],
+        text=new_text
+    )
+
     user_id = tickets[ticket_id]["user_id"]
 
     await context.bot.send_message(
         chat_id=user_id,
-        text=f"✅ Tu ticket #{ticket_id} fue RESUELTO."
+        text=f"🔒 Tu ticket #{ticket_id} fue RESUELTO."
     )
 
     await update.message.reply_text(f"🔒 Ticket #{ticket_id} cerrado.")
