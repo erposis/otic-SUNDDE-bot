@@ -20,7 +20,7 @@ ticket_counter = 1
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("Crear Ticket", callback_data="crear")]]
     await update.message.reply_text(
-        "🔵 OTIC – Soporte Tecnico\n\nPresiona el botón para crear un ticket.",
+        "🔵 OTIC – Soporte Técnico\n\nPresiona el botón para crear un ticket.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
