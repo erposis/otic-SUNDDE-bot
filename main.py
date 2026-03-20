@@ -77,7 +77,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="🔵 SUNDDE – Soportr Técnico\n\nSelecciona tipo de problema:",
+            text="🔵 SUNDDE – Soporte Técnico\n\nSelecciona tipo de problema:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
