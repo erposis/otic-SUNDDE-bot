@@ -179,21 +179,22 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("PROCESO RECIBIDO")
 
-    ticket_id = int(context.args[0])
+    try:
+        ticket_id = int(context.args[0])
 
-    conn = get_connection()
-    cursor = conn.cursor()
+        conn = get_connection()
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT id, message_id FROM tickets WHERE id=%s
-    """, (ticket_id,))
+        cursor.execute("SELECT id FROM tickets WHERE id=%s", (ticket_id,))
+        result = cursor.fetchone()
 
-    result = cursor.fetchone()
+        await update.message.reply_text(f"RESULTADO = {result}")
 
-    await update.message.reply_text(f"DB RESULT = {result}")
+        cursor.close()
+        conn.close()
 
-    cursor.close()
-    conn.close()
+    except Exception as e:
+        await update.message.reply_text(f"ERROR: {e}")
 # ==============================
 # CERRAR (GRUPO)
 # ==============================
