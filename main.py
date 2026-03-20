@@ -20,7 +20,7 @@ def get_connection():
     if not database_url:
         raise ValueError("DATABASE_URL no configurada")
     return psycopg2.connect(database_url)
-
+    print("DATABASE_URL =", os.getenv("DATABASE_URL"))
 
 # ==============================
 # VARIABLES TEMPORALES
