@@ -176,7 +176,7 @@ Creado: {now.strftime("%d/%m/%Y %H:%M")}
 # ==============================
 
 async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
+    await update.message.reply_text("COMANDO PROCESO RECIBIDO")
     if not context.args:
         return
 
