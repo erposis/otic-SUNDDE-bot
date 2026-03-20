@@ -175,8 +175,6 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = tickets[ticket_id]["user_id"]
 
-    await update.message.reply_text(f"DEBUG user_id: {user_id}")
-
     await context.bot.send_message(
         chat_id=user_id,
         text=f"✅ Tu ticket #{ticket_id} fue RESUELTO."
