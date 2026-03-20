@@ -179,13 +179,7 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("PROCESO RECIBIDO")
 
-    try:
-        conn = get_connection()
-        await update.message.reply_text("CONEXION OK")
-    except Exception as e:
-        await update.message.reply_text(f"ERROR DB: {e}")
-        return
-
+    await update.message.reply_text(f"ARGS = {context.args}")
 # ==============================
 # CERRAR (GRUPO)
 # ==============================
