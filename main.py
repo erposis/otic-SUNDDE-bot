@@ -19,12 +19,12 @@ from telegram.ext import (
 # CONFIGURACIÓN
 # ==============================
 
-TIPOS_SOPORTE = ["Acceso", "Impresora", "Correo", "Red", "Otro"]
-PISOS = ["Sótano", "Planta Baja", "1", "2", "3", "4"]
+TIPOS_SOPORTE = ["Acceso", "Impresora", "Correo", "Red/Internet", "WiFi", "Otro"]
+PISOS = ["Sótano", "PB", "1", "2", "3", "4"]
 SISTEMAS = [
-    "PC", "Teléfono móvil", "Central", "Impresora",
-    "Sistema Operativo", "Word", "Excel", "PowerPoint",
-    "Videobin", "RUPDAE", "DENUNCIAS", "ASISTENCIA"
+    "PC", "Celular", "Central", "Impresora",
+    "Windows", "Linux", "Word", "Excel", "PowerPoint",
+    "Videobeam", "RUPDAE", "DENUNCIAS", "ASISTENCIA"
 ]
 
 user_states = {}
@@ -46,7 +46,7 @@ def get_connection():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("Crear Ticket", callback_data="crear_ticket")]]
     await update.message.reply_text(
-        "🎫 Mesa de Ayuda OTIC\n\nPresiona para crear un ticket.",
+        "🎫 Soporte OTIC\n\nPresiona para Solicitar Soporte.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -65,7 +65,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton(t, callback_data=f"tipo_{t}")]
                     for t in TIPOS_SOPORTE]
         await query.edit_message_text(
-            "Selecciona el tipo de soporte:",
+            "Selecciona Tipo de Soporte:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
@@ -76,7 +76,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton(p, callback_data=f"piso_{p}")]
                     for p in PISOS]
         await query.edit_message_text(
-            "Selecciona el piso:",
+            "Selecciona Ubicacion (Piso):",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
