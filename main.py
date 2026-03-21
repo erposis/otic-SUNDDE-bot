@@ -5,9 +5,7 @@ from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
-    MessageHandler,
     ContextTypes,
-    filters,
 )
 
 # ==============================
@@ -24,7 +22,7 @@ def get_connection():
 
 
 # ==============================
-# COMANDO START (PRIVADO)
+# START
 # ==============================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -82,6 +80,7 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     ticket_id = int(context.args[0])
+    current_time = datetime.now()
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -91,13 +90,32 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
         SET estado='EN PROCESO',
             fecha_actualizacion=%s
         WHERE id=%s
-    """, (datetime.now(), ticket_id))
+        RETURNING usuario_id;
+    """, (current_time, ticket_id))
+
+    result = cursor.fetchone()
 
     conn.commit()
     cursor.close()
     conn.close()
 
+    if not result:
+        await update.message.reply_text("Ticket no encontrado.")
+        return
+
+    usuario_id = result[0]
+
+    # Responder en grupo
     await update.message.reply_text(f"🛠 Ticket #{ticket_id} en proceso.")
+
+    # Notificar al usuario por privado
+    try:
+        await context.bot.send_message(
+            chat_id=usuario_id,
+            text=f"Tu ticket #{ticket_id} ahora está EN PROCESO."
+        )
+    except:
+        pass
 
 
 # ==============================
@@ -111,6 +129,7 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     ticket_id = int(context.args[0])
+    current_time = datetime.now()
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -120,13 +139,32 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         SET estado='CERRADO',
             fecha_actualizacion=%s
         WHERE id=%s
-    """, (datetime.now(), ticket_id))
+        RETURNING usuario_id;
+    """, (current_time, ticket_id))
+
+    result = cursor.fetchone()
 
     conn.commit()
     cursor.close()
     conn.close()
 
+    if not result:
+        await update.message.reply_text("Ticket no encontrado.")
+        return
+
+    usuario_id = result[0]
+
+    # Responder en grupo
     await update.message.reply_text(f"🔒 Ticket #{ticket_id} cerrado.")
+
+    # Notificar al usuario por privado
+    try:
+        await context.bot.send_message(
+            chat_id=usuario_id,
+            text=f"Tu ticket #{ticket_id} fue CERRADO."
+        )
+    except:
+        pass
 
 
 # ==============================
@@ -142,11 +180,8 @@ if __name__ == "__main__":
 
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # PRIVADO
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ticket", ticket))
-
-    # GRUPO
     app.add_handler(CommandHandler("proceso", proceso))
     app.add_handler(CommandHandler("cerrar", cerrar))
 
