@@ -14,6 +14,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from telegram.error import BadRequest
 
 # ==============================
 # CONFIGURACIÓN
@@ -148,17 +149,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     cursor.execute("""
         INSERT INTO tickets (
-            usuario_id,
-            usuario_nombre,
-            tipo,
-            piso,
-            sistema,
-            descripcion,
-            estado,
-            asignado_a,
-            prioridad,
-            fecha_creacion,
-            fecha_actualizacion
+            usuario_id, usuario_nombre, tipo, piso, sistema,
+            descripcion, estado, asignado_a, prioridad,
+            fecha_creacion, fecha_actualizacion
         )
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING id;
@@ -184,7 +177,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ticket_text = f"""
 🆕 TICKET #{ticket_id}
 Prioridad: {prioridad_icono(prioridad)} {prioridad}
-Estado: {estado_icono("ABIERTO")} ABIERTO
+Estado: 🟢 ABIERTO
 Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
 
 👤 Usuario: {update.message.from_user.full_name}
@@ -209,7 +202,7 @@ Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
     del user_states[user_id]
 
 # ==============================
-# CAMBIAR ESTADO
+# CAMBIAR ESTADO ROBUSTO
 # ==============================
 
 async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, nuevo_estado):
@@ -232,15 +225,16 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, nue
             asignado_a=%s,
             fecha_actualizacion=%s
         WHERE id=%s
-        RETURNING message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre, usuario_id;
+        RETURNING message_id, tipo, piso, sistema, descripcion,
+                  prioridad, usuario_nombre, usuario_id;
     """, (nuevo_estado, operador, current_time, ticket_id))
 
     result = cursor.fetchone()
     conn.commit()
-    cursor.close()
-    conn.close()
 
     if not result:
+        cursor.close()
+        conn.close()
         await update.message.reply_text("Ticket no encontrado.")
         return
 
@@ -262,11 +256,25 @@ Asignado a: {operador}
 {descripcion}
 """
 
-    await context.bot.edit_message_text(
-        chat_id=group_id,
-        message_id=message_id,
-        text=ticket_text
-    )
+    # Intentar editar
+    try:
+        await context.bot.edit_message_text(
+            chat_id=group_id,
+            message_id=message_id,
+            text=ticket_text
+        )
+    except BadRequest:
+        # Si el mensaje no existe → crear nuevo
+        new_msg = await context.bot.send_message(
+            chat_id=group_id,
+            text=ticket_text
+        )
+        cursor.execute("UPDATE tickets SET message_id=%s WHERE id=%s",
+                       (new_msg.message_id, ticket_id))
+        conn.commit()
+
+    cursor.close()
+    conn.close()
 
     # Notificación privada
     try:
@@ -294,16 +302,10 @@ if __name__ == "__main__":
     TOKEN = os.getenv("BOT_TOKEN")
     GROUP_ID = os.getenv("GROUP_ID")
 
-    if not TOKEN or not GROUP_ID:
-        raise ValueError("Faltan variables de entorno")
-
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # Comandos de grupo
     app.add_handler(CommandHandler("proceso", proceso, filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("cerrar", cerrar, filters=filters.ChatType.GROUPS))
-
-    # Flujo privado
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(
@@ -313,6 +315,6 @@ if __name__ == "__main__":
         )
     )
 
-    print("🚀 BOT INSTITUCIONAL ESTABLE")
+    print("🚀 BOT ROBUSTO OPERATIVO")
 
     app.run_polling(drop_pending_updates=True)
