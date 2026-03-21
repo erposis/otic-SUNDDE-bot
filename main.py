@@ -209,7 +209,7 @@ Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
     del user_states[user_id]
 
 # ==============================
-# CAMBIO DE ESTADO
+# CAMBIAR ESTADO
 # ==============================
 
 async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, nuevo_estado):
@@ -232,7 +232,7 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, nue
             asignado_a=%s,
             fecha_actualizacion=%s
         WHERE id=%s
-        RETURNING message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre;
+        RETURNING message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre, usuario_id;
     """, (nuevo_estado, operador, current_time, ticket_id))
 
     result = cursor.fetchone()
@@ -244,7 +244,7 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, nue
         await update.message.reply_text("Ticket no encontrado.")
         return
 
-    message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre = result
+    message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre, usuario_id = result
 
     ticket_text = f"""
 🆕 TICKET #{ticket_id}
@@ -268,6 +268,15 @@ Asignado a: {operador}
         text=ticket_text
     )
 
+    # Notificación privada
+    try:
+        await context.bot.send_message(
+            chat_id=usuario_id,
+            text=f"📌 Tu ticket #{ticket_id} ahora está en estado: {nuevo_estado}"
+        )
+    except:
+        pass
+
     await update.message.reply_text("Estado actualizado.")
 
 async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -290,7 +299,7 @@ if __name__ == "__main__":
 
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # Comandos grupo primero
+    # Comandos de grupo
     app.add_handler(CommandHandler("proceso", proceso, filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("cerrar", cerrar, filters=filters.ChatType.GROUPS))
 
@@ -304,6 +313,6 @@ if __name__ == "__main__":
         )
     )
 
-    print("🚀 BOT OPERATIVO ESTABLE")
+    print("🚀 BOT INSTITUCIONAL ESTABLE")
 
     app.run_polling(drop_pending_updates=True)
