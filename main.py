@@ -409,6 +409,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("cerrar", cerrar, filters=filters.ChatType.GROUPS))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("id", id_command, filters=filters.ChatType.PRIVATE))
+    app.add_handler(CommandHandler("reporte", reporte, filters=filters.ChatType.GROUPS))
     
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(
