@@ -32,6 +32,13 @@ PRIORIDADES = ["Alta", "Media", "Baja"]
 user_states = {}
 
 # ==============================
+# PERMISOS POR VARIABLES
+# ==============================
+
+ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x]
+SOPORTE_IDS = [int(x) for x in os.getenv("SOPORTE_IDS", "").split(",") if x]
+
+# ==============================
 # DB
 # ==============================
 
