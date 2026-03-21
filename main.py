@@ -295,6 +295,13 @@ Asignado a: {operador}
     await update.message.reply_text("Estado actualizado.")
 
 async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user_id = update.effective_user.id
+
+    if user_id not in SOPORTE_IDS and user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ No tienes permisos para poner tickets en proceso.")
+        return
+
     await cambiar_estado(update, context, "EN PROCESO")
 
 async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
