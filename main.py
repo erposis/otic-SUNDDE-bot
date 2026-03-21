@@ -19,13 +19,14 @@ from telegram.ext import (
 # CONFIGURACIÓN
 # ==============================
 
-TIPOS_SOPORTE = ["Acceso", "Impresora", "Correo", "Red/Internet", "WiFi", "Otro"]
-PISOS = ["Sótano", "PB", "1", "2", "3", "4"]
+TIPOS_SOPORTE = ["Acceso", "Impresora", "Correo", "Red", "Otro"]
+PISOS = ["Sótano", "Planta Baja", "1", "2", "3", "4"]
 SISTEMAS = [
-    "PC", "Celular", "Central", "Impresora",
-    "Windows", "Linux", "Word", "Excel", "PowerPoint",
-    "Videobeam", "RUPDAE", "DENUNCIAS", "ASISTENCIA"
+    "PC", "Teléfono móvil", "Central", "Impresora",
+    "Sistema Operativo", "Word", "Excel", "PowerPoint",
+    "Videobin", "RUPDAE", "DENUNCIAS", "ASISTENCIA"
 ]
+PRIORIDADES = ["Alta", "Media", "Baja"]
 
 user_states = {}
 
@@ -39,6 +40,13 @@ def get_connection():
         raise ValueError("DATABASE_URL no configurada")
     return psycopg2.connect(DATABASE_URL)
 
+def prioridad_icono(prioridad):
+    return {
+        "Alta": "🔴",
+        "Media": "🟡",
+        "Baja": "🟢"
+    }.get(prioridad, "🟡")
+
 # ==============================
 # START
 # ==============================
@@ -46,7 +54,7 @@ def get_connection():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("Crear Ticket", callback_data="crear_ticket")]]
     await update.message.reply_text(
-        "🎫 Soporte OTIC\n\nPresiona para Solicitar Soporte.",
+        "🎫 Mesa de Ayuda OTIC\n\nPresiona para crear un ticket.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -65,7 +73,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton(t, callback_data=f"tipo_{t}")]
                     for t in TIPOS_SOPORTE]
         await query.edit_message_text(
-            "Selecciona Tipo de Soporte:",
+            "Selecciona el tipo de soporte:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
@@ -76,7 +84,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton(p, callback_data=f"piso_{p}")]
                     for p in PISOS]
         await query.edit_message_text(
-            "Selecciona Ubicacion (Piso):",
+            "Selecciona el piso:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
@@ -94,6 +102,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data.startswith("sistema_"):
         user_states[user_id]["sistema"] = query.data.replace("sistema_", "")
+        user_states[user_id]["step"] = "prioridad"
+        keyboard = [[InlineKeyboardButton(p, callback_data=f"prioridad_{p}")]
+                    for p in PRIORIDADES]
+        await query.edit_message_text(
+            "Selecciona la prioridad:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    if query.data.startswith("prioridad_"):
+        user_states[user_id]["prioridad"] = query.data.replace("prioridad_", "")
         user_states[user_id]["step"] = "descripcion"
         await query.edit_message_text("Describe el problema:")
         return
@@ -130,10 +149,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             descripcion,
             estado,
             asignado_a,
+            prioridad,
             fecha_creacion,
             fecha_actualizacion
         )
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         RETURNING id;
     """, (
         user_id,
@@ -144,6 +164,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         descripcion,
         "ABIERTO",
         None,
+        user_states[user_id]["prioridad"],
         current_time,
         current_time
     ))
@@ -151,8 +172,11 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ticket_id = cursor.fetchone()[0]
     conn.commit()
 
+    prioridad = user_states[user_id]["prioridad"]
+
     ticket_text = f"""
 🆕 TICKET #{ticket_id}
+Prioridad: {prioridad_icono(prioridad)} {prioridad}
 Estado: 🟢 ABIERTO
 Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
 
@@ -167,7 +191,6 @@ Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
 
     msg = await context.bot.send_message(chat_id=group_id, text=ticket_text)
 
-    # Guardar message_id
     cursor.execute("""
         UPDATE tickets
         SET message_id=%s
@@ -182,17 +205,17 @@ Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
     del user_states[user_id]
 
 # ==============================
-# PROCESO
+# CAMBIAR PRIORIDAD
 # ==============================
 
-async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def prioridad(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    if not context.args:
+    if len(context.args) < 2:
+        await update.message.reply_text("Uso: /prioridad ID Alta|Media|Baja")
         return
 
     ticket_id = int(context.args[0])
-    tecnico = update.message.from_user.full_name
-    current_time = datetime.now()
+    nueva_prioridad = context.args[1].capitalize()
     group_id = int(os.getenv("GROUP_ID"))
 
     conn = get_connection()
@@ -200,15 +223,13 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     cursor.execute("""
         UPDATE tickets
-        SET estado='EN PROCESO',
-            asignado_a=%s,
+        SET prioridad=%s,
             fecha_actualizacion=%s
         WHERE id=%s
-        RETURNING usuario_id, message_id, tipo, piso, sistema, descripcion, fecha_creacion;
-    """, (tecnico, current_time, ticket_id))
+        RETURNING message_id, tipo, piso, sistema, descripcion, estado;
+    """, (nueva_prioridad, datetime.now(), ticket_id))
 
     result = cursor.fetchone()
-
     conn.commit()
     cursor.close()
     conn.close()
@@ -217,15 +238,14 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Ticket no encontrado.")
         return
 
-    usuario_id, message_id, tipo, piso, sistema, descripcion, fecha_creacion = result
+    message_id, tipo, piso, sistema, descripcion, estado = result
 
     ticket_text = f"""
 🆕 TICKET #{ticket_id}
-Estado: 🟡 EN PROCESO
-Asignado a: {tecnico}
-Actualizado: {current_time.strftime("%d/%m/%Y %H:%M")}
+Prioridad: {prioridad_icono(nueva_prioridad)} {nueva_prioridad}
+Estado: {estado}
+Actualizado: {datetime.now().strftime("%d/%m/%Y %H:%M")}
 
-👤 Usuario: {usuario_id}
 🧩 Tipo: {tipo}
 🏢 Piso: {piso}
 🖥 Sistema: {sistema}
@@ -240,74 +260,7 @@ Actualizado: {current_time.strftime("%d/%m/%Y %H:%M")}
         text=ticket_text
     )
 
-    await context.bot.send_message(
-        chat_id=usuario_id,
-        text=f"Tu ticket #{ticket_id} ahora está EN PROCESO."
-    )
-
-# ==============================
-# CERRAR
-# ==============================
-
-async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    if not context.args:
-        return
-
-    ticket_id = int(context.args[0])
-    tecnico = update.message.from_user.full_name
-    current_time = datetime.now()
-    group_id = int(os.getenv("GROUP_ID"))
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        UPDATE tickets
-        SET estado='CERRADO',
-            asignado_a=%s,
-            fecha_actualizacion=%s
-        WHERE id=%s
-        RETURNING usuario_id, message_id, tipo, piso, sistema, descripcion, fecha_creacion;
-    """, (tecnico, current_time, ticket_id))
-
-    result = cursor.fetchone()
-
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    if not result:
-        await update.message.reply_text("Ticket no encontrado.")
-        return
-
-    usuario_id, message_id, tipo, piso, sistema, descripcion, fecha_creacion = result
-
-    ticket_text = f"""
-🆕 TICKET #{ticket_id}
-Estado: 🔴 CERRADO
-Cerrado por: {tecnico}
-Cerrado: {current_time.strftime("%d/%m/%Y %H:%M")}
-
-👤 Usuario: {usuario_id}
-🧩 Tipo: {tipo}
-🏢 Piso: {piso}
-🖥 Sistema: {sistema}
-
-📝 Descripción:
-{descripcion}
-"""
-
-    await context.bot.edit_message_text(
-        chat_id=group_id,
-        message_id=message_id,
-        text=ticket_text
-    )
-
-    await context.bot.send_message(
-        chat_id=usuario_id,
-        text=f"Tu ticket #{ticket_id} fue CERRADO."
-    )
+    await update.message.reply_text("Prioridad actualizada.")
 
 # ==============================
 # MAIN
@@ -326,9 +279,8 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-    app.add_handler(CommandHandler("proceso", proceso))
-    app.add_handler(CommandHandler("cerrar", cerrar))
+    app.add_handler(CommandHandler("prioridad", prioridad))
 
-    print("🚀 BOT INSTITUCIONAL ACTIVO")
+    print("🚀 BOT OPERATIVO CON PRIORIDAD")
 
     app.run_polling(drop_pending_updates=True)
