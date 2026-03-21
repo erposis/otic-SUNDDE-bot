@@ -332,6 +332,68 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Tu user_id es: {update.effective_user.id}")
 
+async def reporte(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user_id = update.effective_user.id
+
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("⛔ Solo ADMIN puede ver reportes.")
+        return
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Totales por estado
+    cursor.execute("""
+        SELECT estado, COUNT(*) 
+        FROM tickets
+        GROUP BY estado
+    """)
+    estados = dict(cursor.fetchall())
+
+    # Totales por prioridad
+    cursor.execute("""
+        SELECT prioridad, COUNT(*)
+        FROM tickets
+        GROUP BY prioridad
+    """)
+    prioridades = dict(cursor.fetchall())
+
+    # Totales por operador
+    cursor.execute("""
+        SELECT asignado_a, COUNT(*)
+        FROM tickets
+        WHERE asignado_a IS NOT NULL
+        GROUP BY asignado_a
+    """)
+    operadores = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    total = sum(estados.values())
+
+    reporte_text = f"""
+📊 REPORTE OPERATIVO
+
+🎫 Total tickets: {total}
+
+🟢 Abiertos: {estados.get('ABIERTO', 0)}
+🟡 En proceso: {estados.get('EN PROCESO', 0)}
+🔴 Cerrados: {estados.get('CERRADO', 0)}
+
+🔴 Alta: {prioridades.get('Alta', 0)}
+🟡 Media: {prioridades.get('Media', 0)}
+🟢 Baja: {prioridades.get('Baja', 0)}
+
+👨‍🔧 Operadores:
+"""
+
+    for op, count in operadores:
+        reporte_text += f"\n{op}: {count}"
+
+    await update.message.reply_text(reporte_text)
+
 # ==============================
 # MAIN
 # ==============================
