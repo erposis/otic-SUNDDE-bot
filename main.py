@@ -220,24 +220,22 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, nue
 
     ticket_id = int(context.args[0])
     operador = update.message.from_user.full_name
+    operador_id = update.effective_user.id
     group_id = int(os.getenv("GROUP_ID"))
     current_time = datetime.now()
 
     conn = get_connection()
     cursor = conn.cursor()
 
+    # Obtener datos actuales del ticket
     cursor.execute("""
-        UPDATE tickets
-        SET estado=%s,
-            asignado_a=%s,
-            fecha_actualizacion=%s
+        SELECT asignado_a, message_id, tipo, piso, sistema, descripcion,
+               prioridad, usuario_nombre, usuario_id
+        FROM tickets
         WHERE id=%s
-        RETURNING message_id, tipo, piso, sistema, descripcion,
-                  prioridad, usuario_nombre, usuario_id;
-    """, (nuevo_estado, operador, current_time, ticket_id))
+    """, (ticket_id,))
 
     result = cursor.fetchone()
-    conn.commit()
 
     if not result:
         cursor.close()
@@ -245,7 +243,33 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, nue
         await update.message.reply_text("Ticket no encontrado.")
         return
 
-    message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre, usuario_id = result
+    asignado_actual, message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre, usuario_id = result
+
+    # ==============================
+    # VALIDACIÓN PARA CERRAR
+    # ==============================
+
+    if nuevo_estado == "CERRADO":
+
+        if operador_id not in ADMIN_IDS and asignado_actual != operador:
+            cursor.close()
+            conn.close()
+            await update.message.reply_text("⛔ Solo quien tomó el ticket puede cerrarlo.")
+            return
+
+    # ==============================
+    # ACTUALIZAR ESTADO
+    # ==============================
+
+    cursor.execute("""
+        UPDATE tickets
+        SET estado=%s,
+            asignado_a=%s,
+            fecha_actualizacion=%s
+        WHERE id=%s
+    """, (nuevo_estado, operador, current_time, ticket_id))
+
+    conn.commit()
 
     ticket_text = f"""
 🆕 TICKET #{ticket_id}
@@ -263,7 +287,6 @@ Asignado a: {operador}
 {descripcion}
 """
 
-    # Intentar editar
     try:
         await context.bot.edit_message_text(
             chat_id=group_id,
@@ -271,7 +294,6 @@ Asignado a: {operador}
             text=ticket_text
         )
     except BadRequest:
-        # Si el mensaje no existe → crear nuevo
         new_msg = await context.bot.send_message(
             chat_id=group_id,
             text=ticket_text
