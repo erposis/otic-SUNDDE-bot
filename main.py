@@ -19,12 +19,12 @@ from telegram.ext import (
 # CONFIGURACIÓN
 # ==============================
 
-TIPOS_SOPORTE = ["Acceso", "Impresora", "Correo", "Red", "Otro"]
-PISOS = ["Sótano", "Planta Baja", "1", "2", "3", "4"]
+TIPOS_SOPORTE = ["Acceso", "Impresora", "Correo", "Internet", "WiFi", "Otro"]
+PISOS = ["Sótano", "PB", "1", "2", "3", "4"]
 SISTEMAS = [
-    "PC", "Teléfono móvil", "Central", "Impresora",
-    "Sistema Operativo", "Word", "Excel", "PowerPoint",
-    "Videobin", "RUPDAE", "DENUNCIAS", "ASISTENCIA"
+    "PC", "Laptop", "Celular", "Central", "Impresora",
+    "SO Windows", "MS Office", "LibreOffice", "Carp. Compartida",
+    "Videobeam", "RUPDAE", "DENUNCIAS", "ASISTENCIA"
 ]
 PRIORIDADES = ["Alta", "Media", "Baja"]
 
@@ -54,7 +54,7 @@ def prioridad_icono(prioridad):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("Crear Ticket", callback_data="crear_ticket")]]
     await update.message.reply_text(
-        "🎫 Mesa de Ayuda OTIC\n\nPresiona para crear un ticket.",
+        "🎫 Soporte OTIC\n\nPresiona para crear un ticket.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
