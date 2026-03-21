@@ -47,6 +47,13 @@ def prioridad_icono(prioridad):
         "Baja": "🟢"
     }.get(prioridad, "🟡")
 
+def estado_icono(estado):
+    return {
+        "ABIERTO": "🟢",
+        "EN PROCESO": "🟡",
+        "CERRADO": "🔴"
+    }.get(estado, "🟡")
+
 # ==============================
 # START
 # ==============================
@@ -177,7 +184,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ticket_text = f"""
 🆕 TICKET #{ticket_id}
 Prioridad: {prioridad_icono(prioridad)} {prioridad}
-Estado: 🟢 ABIERTO
+Estado: {estado_icono("ABIERTO")} ABIERTO
 Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
 
 👤 Usuario: {update.message.from_user.full_name}
@@ -191,11 +198,8 @@ Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
 
     msg = await context.bot.send_message(chat_id=group_id, text=ticket_text)
 
-    cursor.execute("""
-        UPDATE tickets
-        SET message_id=%s
-        WHERE id=%s
-    """, (msg.message_id, ticket_id))
+    cursor.execute("UPDATE tickets SET message_id=%s WHERE id=%s",
+                   (msg.message_id, ticket_id))
 
     conn.commit()
     cursor.close()
@@ -205,29 +209,31 @@ Creado: {current_time.strftime("%d/%m/%Y %H:%M")}
     del user_states[user_id]
 
 # ==============================
-# CAMBIAR PRIORIDAD
+# CAMBIO DE ESTADO
 # ==============================
 
-async def prioridad(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, nuevo_estado):
 
-    if len(context.args) < 2:
-        await update.message.reply_text("Uso: /prioridad ID Alta|Media|Baja")
+    if not context.args:
+        await update.message.reply_text("Indica el ID del ticket.")
         return
 
     ticket_id = int(context.args[0])
-    nueva_prioridad = context.args[1].capitalize()
+    operador = update.message.from_user.full_name
     group_id = int(os.getenv("GROUP_ID"))
+    current_time = datetime.now()
 
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
         UPDATE tickets
-        SET prioridad=%s,
+        SET estado=%s,
+            asignado_a=%s,
             fecha_actualizacion=%s
         WHERE id=%s
-        RETURNING message_id, tipo, piso, sistema, descripcion, estado;
-    """, (nueva_prioridad, datetime.now(), ticket_id))
+        RETURNING message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre;
+    """, (nuevo_estado, operador, current_time, ticket_id))
 
     result = cursor.fetchone()
     conn.commit()
@@ -238,14 +244,16 @@ async def prioridad(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Ticket no encontrado.")
         return
 
-    message_id, tipo, piso, sistema, descripcion, estado = result
+    message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre = result
 
     ticket_text = f"""
 🆕 TICKET #{ticket_id}
-Prioridad: {prioridad_icono(nueva_prioridad)} {nueva_prioridad}
-Estado: {estado}
-Actualizado: {datetime.now().strftime("%d/%m/%Y %H:%M")}
+Prioridad: {prioridad_icono(prioridad)} {prioridad}
+Estado: {estado_icono(nuevo_estado)} {nuevo_estado}
+Actualizado: {current_time.strftime("%d/%m/%Y %H:%M")}
+Asignado a: {operador}
 
+👤 Usuario: {usuario_nombre}
 🧩 Tipo: {tipo}
 🏢 Piso: {piso}
 🖥 Sistema: {sistema}
@@ -260,7 +268,13 @@ Actualizado: {datetime.now().strftime("%d/%m/%Y %H:%M")}
         text=ticket_text
     )
 
-    await update.message.reply_text("Prioridad actualizada.")
+    await update.message.reply_text("Estado actualizado.")
+
+async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cambiar_estado(update, context, "EN PROCESO")
+
+async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await cambiar_estado(update, context, "CERRADO")
 
 # ==============================
 # MAIN
@@ -272,15 +286,24 @@ if __name__ == "__main__":
     GROUP_ID = os.getenv("GROUP_ID")
 
     if not TOKEN or not GROUP_ID:
-        raise ValueError("BOT_TOKEN o GROUP_ID no configurado")
+        raise ValueError("Faltan variables de entorno")
 
     app = ApplicationBuilder().token(TOKEN).build()
 
+    # Comandos grupo primero
+    app.add_handler(CommandHandler("proceso", proceso, filters=filters.ChatType.GROUPS))
+    app.add_handler(CommandHandler("cerrar", cerrar, filters=filters.ChatType.GROUPS))
+
+    # Flujo privado
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
-    app.add_handler(CommandHandler("prioridad", prioridad))
+    app.add_handler(
+        MessageHandler(
+            filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND,
+            text_handler
+        )
+    )
 
-    print("🚀 BOT OPERATIVO CON PRIORIDAD")
+    print("🚀 BOT OPERATIVO ESTABLE")
 
     app.run_polling(drop_pending_updates=True)
