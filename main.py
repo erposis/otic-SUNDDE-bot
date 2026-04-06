@@ -21,7 +21,7 @@ from telegram.error import BadRequest
 # ==============================
 
 TIPOS_SOPORTE = ["Acceso", "Impresora", "Correo", "Internet", "WiFi", "Otro"]
-PISOS = ["Sótano", "PB", "1", "2", "3", "4", "Los Cedros"]
+PISOS = ["Sótano", "PB", "1", "2", "3", "4", "Cedros"]
 SISTEMAS = [
     "PC", "Laptop", "Celular", "Central", "Impresora",
     "SO Windows", "MS Office", "LibreOffice", "Carp. Compartida",
