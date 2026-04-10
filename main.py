@@ -146,7 +146,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ticket_id = cur.fetchone()[0]
     conn.commit()
 
-   msg = await context.bot.send_message(
+    msg = await context.bot.send_message(
     chat_id=GROUP_ID,
     text=f"""
 🆕 TICKET #{ticket_id}
