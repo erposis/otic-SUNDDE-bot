@@ -178,7 +178,6 @@ Creado: {now_time.strftime("%d/%m/%Y %H:%M")}
 📝 Descripción:
 {descripcion}
 """
-
     msg = await context.bot.send_message(chat_id=GROUP_ID, text=text)
 
     cur.execute(
