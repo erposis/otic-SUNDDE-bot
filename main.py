@@ -297,6 +297,16 @@ async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
     conn = get_connection()
     cur = conn.cursor()
 
+    cur.execute("SELECT COUNT(*) FROM tickets WHERE estado != 'CERRADO'")
+print("TICKETS ABIERTOS:", cur.fetchone()[0])
+
+    cur.execute("""
+    SELECT COUNT(*) FROM tickets
+    WHERE estado != 'CERRADO'
+    AND sla_cierre_vence < %s
+""", (now_time,))
+print("SLA VENCIDOS:", cur.fetchone()[0])
+
     # 🔴 SLA VENCIDO
     cur.execute("""
         UPDATE tickets
