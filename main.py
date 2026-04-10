@@ -1,6 +1,6 @@
 import os
 import psycopg2
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -18,11 +18,7 @@ from telegram.error import BadRequest
 
 TIPOS_SOPORTE = ["Acceso", "Impresora", "Correo", "Internet", "WiFi", "Otro"]
 PISOS = ["Sótano", "PB", "1", "2", "3", "4", "Cedros"]
-SISTEMAS = [
-    "PC", "Laptop", "Celular", "Central", "Impresora",
-    "SO Windows", "MS Office", "LibreOffice", "Carp. Compartida",
-    "Videobeam", "RUPDAE", "DENUNCIAS", "ASISTENCIA", "PROMOCIONES"
-]
+SISTEMAS = ["PC", "Laptop", "Celular", "Central", "Impresora"]
 PRIORIDADES = ["Alta", "Media", "Baja"]
 
 user_states = {}
@@ -30,6 +26,15 @@ user_states = {}
 ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x]
 SOPORTE_IDS = [int(x) for x in os.getenv("SOPORTE_IDS", "").split(",") if x]
 
+GROUP_ID = int(os.getenv("GROUP_ID", "0"))
+TOKEN = os.getenv("BOT_TOKEN")
+
+# ==============================
+# TIME STANDARD (CRÍTICO)
+# ==============================
+
+def now_utc():
+    return datetime.now(timezone.utc)
 
 # ==============================
 # DB
@@ -38,14 +43,11 @@ SOPORTE_IDS = [int(x) for x in os.getenv("SOPORTE_IDS", "").split(",") if x]
 def get_connection():
     return psycopg2.connect(os.getenv("DATABASE_URL"))
 
-
 def prioridad_icono(p):
     return {"Alta": "🔴", "Media": "🟡", "Baja": "🟢"}.get(p, "🟡")
 
-
 def estado_icono(e):
     return {"ABIERTO": "🟢", "EN PROCESO": "🟡", "CERRADO": "🔴"}.get(e, "🟡")
-
 
 # ==============================
 # START
@@ -54,10 +56,9 @@ def estado_icono(e):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("Crear Ticket", callback_data="crear_ticket")]]
     await update.message.reply_text(
-        "🎫 Sistema de Soporte\nPresiona para crear un ticket.",
+        "🎫 Sistema de Soporte",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-
 
 # ==============================
 # FLUJO CREACIÓN
@@ -66,6 +67,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
     user_id = query.from_user.id
 
     if query.data == "crear_ticket":
@@ -101,7 +103,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Describe el problema:")
         return
 
-
 # ==============================
 # CREAR TICKET
 # ==============================
@@ -110,15 +111,14 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
 
     if user_id not in user_states:
-        return await update.message.reply_text("Usa /start")
+        return
 
     if user_states[user_id]["step"] != "descripcion":
         return
 
     data = user_states[user_id]
     descripcion = update.message.text
-    now = datetime.now()
-    group_id = int(os.getenv("GROUP_ID"))
+    now = now_utc()
 
     conn = get_connection()
     cur = conn.cursor()
@@ -147,8 +147,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.commit()
 
     msg = await context.bot.send_message(
-        chat_id=group_id,
-        text=f"🆕 TICKET #{ticket_id}\nPrioridad: {data['prioridad']}\nEstado: ABIERTO\n\n{descripcion}"
+        chat_id=GROUP_ID,
+        text=f"🆕 TICKET #{ticket_id}\nPrioridad: {data['prioridad']}\n\n{descripcion}"
     )
 
     cur.execute("UPDATE tickets SET message_id=%s WHERE id=%s", (msg.message_id, ticket_id))
@@ -159,7 +159,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     del user_states[user_id]
     await update.message.reply_text(f"✅ Ticket #{ticket_id} creado")
-
 
 # ==============================
 # PROCESO (CONCURRENCIA REAL)
@@ -183,11 +182,11 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
         UPDATE tickets
         SET estado='EN PROCESO',
             asignado_a=%s,
-            fecha_actualizacion=NOW()
+            fecha_actualizacion=%s
         WHERE id=%s
         AND estado='ABIERTO'
         RETURNING id;
-    """, (user_id, ticket_id))
+    """, (user_id, now_utc(), ticket_id))
 
     result = cur.fetchone()
     conn.commit()
@@ -196,10 +195,9 @@ async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
 
     if result:
-        await update.message.reply_text(f"✅ Ticket {ticket_id} asignado")
+        await update.message.reply_text(f"✅ Ticket {ticket_id} tomado")
     else:
-        await update.message.reply_text("❌ Ya fue tomado")
-
+        await update.message.reply_text("❌ Ya fue tomado por otro técnico")
 
 # ==============================
 # CERRAR (PERMISOS REALES)
@@ -230,12 +228,12 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cur.execute("""
         UPDATE tickets
         SET estado='CERRADO',
-            closed_at=NOW(),
+            closed_at=%s,
             closed_by=%s
         WHERE id=%s
         AND estado!='CERRADO'
         RETURNING id;
-    """, (user_id, ticket_id))
+    """, (now_utc(), user_id, ticket_id))
 
     result = cur.fetchone()
     conn.commit()
@@ -248,59 +246,18 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("⚠️ Ya estaba cerrado")
 
-
-# ==============================
-# REPORTES
-# ==============================
-
-async def reporte(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    if user_id not in ADMIN_IDS:
-        return await update.message.reply_text("⛔ Solo admin")
-
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("SELECT estado, COUNT(*) FROM tickets GROUP BY estado")
-    estados = dict(cur.fetchall())
-
-    cur.execute("SELECT prioridad, COUNT(*) FROM tickets GROUP BY prioridad")
-    prioridades = dict(cur.fetchall())
-
-    cur.close()
-    conn.close()
-
-    total = sum(estados.values())
-
-    await update.message.reply_text(
-        f"""📊 REPORTE
-
-Total: {total}
-Abiertos: {estados.get('ABIERTO',0)}
-En proceso: {estados.get('EN PROCESO',0)}
-Cerrados: {estados.get('CERRADO',0)}
-
-Alta: {prioridades.get('Alta',0)}
-Media: {prioridades.get('Media',0)}
-Baja: {prioridades.get('Baja',0)}
-"""
-    )
-
-
 # ==============================
 # MAIN
 # ==============================
 
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
+    app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("proceso", proceso))
     app.add_handler(CommandHandler("cerrar", cerrar))
-    app.add_handler(CommandHandler("reporte", reporte))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    print("🚀 BOT LISTO Y OPTIMIZADO")
+    print("🚀 BOT LISTO")
     app.run_polling(drop_pending_updates=True)
