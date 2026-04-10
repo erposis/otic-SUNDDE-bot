@@ -283,12 +283,50 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await cambiar_estado(update, context, "CERRADO")
 
 # =========================
+# FUNCION MONITOR SLA
+# =========================
+
+async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
+
+    now_time = now_local()
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    # 🔴 SLA VENCIDO
+    cur.execute("""
+        UPDATE tickets
+        SET sla_estado = 'BREACHED'
+        WHERE estado != 'CERRADO'
+        AND sla_cierre_vence IS NOT NULL
+        AND sla_cierre_vence < %s
+        AND sla_estado != 'BREACHED'
+    """, (now_time,))
+
+    # 🟡 SLA EN RIESGO (faltan <10 min)
+    cur.execute("""
+        UPDATE tickets
+        SET sla_estado = 'WARNING'
+        WHERE estado != 'CERRADO'
+        AND sla_cierre_vence IS NOT NULL
+        AND sla_cierre_vence BETWEEN %s AND %s
+        AND sla_estado = 'OK'
+    """, (now_time, now_time + timedelta(minutes=10)))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+# =========================
 # MAIN
 # =========================
 
 if __name__ == "__main__":
 
     app = ApplicationBuilder().token(TOKEN).build()
+
+    job_queue = app.job_queue
+    job_queue.run_repeating(monitor_sla, interval=60, first=10)
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
