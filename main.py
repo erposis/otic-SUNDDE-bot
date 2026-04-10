@@ -165,19 +165,19 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.commit()
 
     text = f"""
-🆕 TICKET #{ticket_id}
-Prioridad: {prioridad_icono(state['prioridad'])} {state['prioridad']}
-Estado: 🟢 ABIERTO
-Creado: {now_time.strftime("%d/%m/%Y %H:%M")}
+    🆕 TICKET #{ticket_id}
+    Prioridad: {prioridad_icono(state['prioridad'])} {state['prioridad']}
+    Estado: 🟢 ABIERTO
+    Creado: {now_time.strftime("%d/%m/%Y %H:%M")}
 
-👤 Usuario: {update.message.from_user.full_name}
-🧩 Tipo: {state['tipo']}
-🏢 Piso: {state['piso']}
-🖥 Sistema: {state['sistema']}
+    👤 Usuario: {update.message.from_user.full_name}
+    🧩 Tipo: {state['tipo']}
+    🏢 Piso: {state['piso']}
+    🖥 Sistema: {state['sistema']}
 
-📝 Descripción:
-{descripcion}
-"""
+    📝 Descripción:
+    {descripcion}
+    """
     msg = await context.bot.send_message(chat_id=GROUP_ID, text=text)
 
     cur.execute(
