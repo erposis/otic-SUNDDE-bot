@@ -146,10 +146,23 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ticket_id = cur.fetchone()[0]
     conn.commit()
 
-    msg = await context.bot.send_message(
-        chat_id=GROUP_ID,
-        text=f"🆕 TICKET #{ticket_id}\nPrioridad: {data['prioridad']}\n\n{descripcion}"
-    )
+   msg = await context.bot.send_message(
+    chat_id=GROUP_ID,
+    text=f"""
+🆕 TICKET #{ticket_id}
+Prioridad: {prioridad_icono(data['prioridad'])} {data['prioridad']}
+Estado: 🟢 ABIERTO
+Creado: {now.strftime("%d/%m/%Y %H:%M")}
+
+👤 Usuario: {update.message.from_user.full_name}
+🧩 Tipo: {data['tipo']}
+🏢 Piso: {data['piso']}
+🖥 Sistema: {data['sistema']}
+
+📝 Descripción:
+{descripcion}
+"""
+)
 
     cur.execute("UPDATE tickets SET message_id=%s WHERE id=%s", (msg.message_id, ticket_id))
     conn.commit()
