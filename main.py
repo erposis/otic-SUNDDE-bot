@@ -298,7 +298,7 @@ async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
     cur = conn.cursor()
 
     cur.execute("SELECT COUNT(*) FROM tickets WHERE estado != 'CERRADO'")
-print("TICKETS ABIERTOS:", cur.fetchone()[0])
+    print("TICKETS ABIERTOS:", cur.fetchone()[0])
 
     cur.execute("""
     SELECT COUNT(*) FROM tickets
