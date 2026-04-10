@@ -289,7 +289,9 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================
 
 async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
-
+    
+    print("🔥 MONITOR SLA EJECUTÁNDOSE")
+    
     now_time = now_local()
 
     conn = get_connection()
