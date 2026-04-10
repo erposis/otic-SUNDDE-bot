@@ -304,8 +304,8 @@ print("TICKETS ABIERTOS:", cur.fetchone()[0])
     SELECT COUNT(*) FROM tickets
     WHERE estado != 'CERRADO'
     AND sla_cierre_vence < %s
-""", (now_time,))
-print("SLA VENCIDOS:", cur.fetchone()[0])
+    """, (now_time,))
+    print("SLA VENCIDOS:", cur.fetchone()[0])
 
     # 🔴 SLA VENCIDO
     cur.execute("""
