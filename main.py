@@ -2,6 +2,7 @@ import os
 import psycopg2
 import pytz
 from datetime import datetime
+from datetime import timedelta
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -49,6 +50,14 @@ def get_connection():
 
 def prioridad_icono(p):
     return {"Alta": "🔴", "Media": "🟡", "Baja": "🟢"}.get(p, "🟡")
+
+def calcular_sla(prioridad, base_time):
+    if prioridad == "Alta":
+        minutos = 30
+    else:
+        minutos = 120  # Media y Baja
+
+    return base_time + timedelta(minutes=minutos)
 
 def estado_icono(e):
     return {"ABIERTO": "🟢", "EN PROCESO": "🟡", "CERRADO": "🔴"}.get(e, "🟡")
@@ -123,30 +132,35 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     descripcion = update.message.text
     now_time = now_local()
+    sla_respuesta = calcular_sla(state["prioridad"], now_time)
+    sla_cierre = calcular_sla(state["prioridad"], now_time)
 
     conn = get_connection()
     cur = conn.cursor()
 
     cur.execute("""
-        INSERT INTO tickets (
-            usuario_id, usuario_nombre, tipo, piso, sistema,
-            descripcion, estado, asignado_a, prioridad,
-            fecha_creacion, fecha_actualizacion
-        )
-        VALUES (%s,%s,%s,%s,%s,%s,'ABIERTO',NULL,%s,%s,%s)
-        RETURNING id;
-    """, (
-        uid,
-        update.message.from_user.full_name,
-        state["tipo"],
-        state["piso"],
-        state["sistema"],
-        descripcion,
-        state["prioridad"],
-        now_time,
-        now_time
-    ))
-
+        cur.execute("""
+    INSERT INTO tickets (
+        usuario_id, usuario_nombre, tipo, piso, sistema,
+        descripcion, estado, asignado_a, prioridad,
+        fecha_creacion, fecha_actualizacion,
+        sla_respuesta_vence, sla_cierre_vence, sla_estado
+    )
+    VALUES (%s,%s,%s,%s,%s,%s,'ABIERTO',NULL,%s,%s,%s,%s,%s,'OK')
+    RETURNING id;
+""", (
+    uid,
+    update.message.from_user.full_name,
+    state["tipo"],
+    state["piso"],
+    state["sistema"],
+    descripcion,
+    state["prioridad"],
+    now_time,
+    now_time,
+    sla_respuesta,
+    sla_cierre
+))
     ticket_id = cur.fetchone()[0]
     conn.commit()
 
