@@ -1,6 +1,6 @@
 import os
 import psycopg2
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -10,7 +10,6 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-from telegram.error import BadRequest
 
 # ==============================
 # CONFIG
@@ -18,7 +17,7 @@ from telegram.error import BadRequest
 
 TIPOS_SOPORTE = ["Acceso", "Impresora", "Correo", "Internet", "WiFi", "Otro"]
 PISOS = ["Sótano", "PB", "1", "2", "3", "4", "Cedros"]
-SISTEMAS = ["PC", "Laptop", "Celular", "Central", "Impresora"]
+SISTEMAS = ["PC", "Laptop", "Celular", "Impresora"]
 PRIORIDADES = ["Alta", "Media", "Baja"]
 
 user_states = {}
@@ -29,8 +28,10 @@ SOPORTE_IDS = [int(x) for x in os.getenv("SOPORTE_IDS", "").split(",") if x]
 GROUP_ID = int(os.getenv("GROUP_ID", "0"))
 TOKEN = os.getenv("BOT_TOKEN")
 
+DASHBOARD_MESSAGE_ID = None
+
 # ==============================
-# TIME STANDARD (CRÍTICO)
+# TIME
 # ==============================
 
 def now_utc():
@@ -43,11 +44,55 @@ def now_utc():
 def get_connection():
     return psycopg2.connect(os.getenv("DATABASE_URL"))
 
-def prioridad_icono(p):
-    return {"Alta": "🔴", "Media": "🟡", "Baja": "🟢"}.get(p, "🟡")
+# ==============================
+# DASHBOARD
+# ==============================
 
-def estado_icono(e):
-    return {"ABIERTO": "🟢", "EN PROCESO": "🟡", "CERRADO": "🔴"}.get(e, "🟡")
+async def update_dashboard(context):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT estado, COUNT(*) FROM tickets GROUP BY estado")
+    estados = dict(cur.fetchall())
+
+    cur.execute("""
+        SELECT asignado_a, COUNT(*)
+        FROM tickets
+        WHERE estado != 'CERRADO'
+        GROUP BY asignado_a
+    """)
+    carga = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    total = sum(estados.values())
+
+    text = f"""
+📊 DASHBOARD OTIC
+
+🎫 Total tickets: {total}
+🟢 Abiertos: {estados.get('ABIERTO',0)}
+🟡 En proceso: {estados.get('EN PROCESO',0)}
+🔴 Cerrados: {estados.get('CERRADO',0)}
+
+👨‍💻 Carga:
+"""
+
+    for tech, count in carga:
+        text += f"\n- {tech}: {count}"
+
+    global DASHBOARD_MESSAGE_ID
+
+    if DASHBOARD_MESSAGE_ID:
+        await context.bot.edit_message_text(
+            chat_id=GROUP_ID,
+            message_id=DASHBOARD_MESSAGE_ID,
+            text=text
+        )
+    else:
+        msg = await context.bot.send_message(chat_id=GROUP_ID, text=text)
+        DASHBOARD_MESSAGE_ID = msg.message_id
 
 # ==============================
 # START
@@ -55,13 +100,10 @@ def estado_icono(e):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton("Crear Ticket", callback_data="crear_ticket")]]
-    await update.message.reply_text(
-        "🎫 Sistema de Soporte",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    await update.message.reply_text("Sistema OTIC", reply_markup=InlineKeyboardMarkup(keyboard))
 
 # ==============================
-# FLUJO CREACIÓN
+# BOTONES
 # ==============================
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -73,35 +115,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "crear_ticket":
         user_states[user_id] = {"step": "tipo"}
         keyboard = [[InlineKeyboardButton(t, callback_data=f"tipo_{t}")] for t in TIPOS_SOPORTE]
-        await query.edit_message_text("Selecciona tipo:", reply_markup=InlineKeyboardMarkup(keyboard))
-        return
-
-    if query.data.startswith("tipo_"):
-        user_states[user_id]["tipo"] = query.data.replace("tipo_", "")
-        user_states[user_id]["step"] = "piso"
-        keyboard = [[InlineKeyboardButton(p, callback_data=f"piso_{p}")] for p in PISOS]
-        await query.edit_message_text("Selecciona piso:", reply_markup=InlineKeyboardMarkup(keyboard))
-        return
-
-    if query.data.startswith("piso_"):
-        user_states[user_id]["piso"] = query.data.replace("piso_", "")
-        user_states[user_id]["step"] = "sistema"
-        keyboard = [[InlineKeyboardButton(s, callback_data=f"sistema_{s}")] for s in SISTEMAS]
-        await query.edit_message_text("Selecciona sistema:", reply_markup=InlineKeyboardMarkup(keyboard))
-        return
-
-    if query.data.startswith("sistema_"):
-        user_states[user_id]["sistema"] = query.data.replace("sistema_", "")
-        user_states[user_id]["step"] = "prioridad"
-        keyboard = [[InlineKeyboardButton(p, callback_data=f"prioridad_{p}")] for p in PRIORIDADES]
-        await query.edit_message_text("Selecciona prioridad:", reply_markup=InlineKeyboardMarkup(keyboard))
-        return
-
-    if query.data.startswith("prioridad_"):
-        user_states[user_id]["prioridad"] = query.data.replace("prioridad_", "")
-        user_states[user_id]["step"] = "descripcion"
-        await query.edit_message_text("Describe el problema:")
-        return
+        await query.edit_message_text("Tipo:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 # ==============================
 # CREAR TICKET
@@ -111,9 +125,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
 
     if user_id not in user_states:
-        return
-
-    if user_states[user_id]["step"] != "descripcion":
         return
 
     data = user_states[user_id]
@@ -126,19 +137,19 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cur.execute("""
         INSERT INTO tickets (
             usuario_id, usuario_nombre, tipo, piso, sistema,
-            descripcion, estado, asignado_a, prioridad,
+            descripcion, estado, prioridad,
             fecha_creacion, fecha_actualizacion
         )
-        VALUES (%s,%s,%s,%s,%s,%s,'ABIERTO',NULL,%s,%s,%s)
+        VALUES (%s,%s,%s,%s,%s,%s,'ABIERTO',%s,%s,%s)
         RETURNING id;
     """, (
         user_id,
         update.message.from_user.full_name,
         data["tipo"],
-        data["piso"],
-        data["sistema"],
+        data.get("piso",""),
+        data.get("sistema",""),
         descripcion,
-        data["prioridad"],
+        data.get("prioridad","Media"),
         now,
         now
     ))
@@ -147,22 +158,9 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.commit()
 
     msg = await context.bot.send_message(
-    chat_id=GROUP_ID,
-    text=f"""
-🆕 TICKET #{ticket_id}
-Prioridad: {prioridad_icono(data['prioridad'])} {data['prioridad']}
-Estado: 🟢 ABIERTO
-Creado: {now.strftime("%d/%m/%Y %H:%M")}
-
-👤 Usuario: {update.message.from_user.full_name}
-🧩 Tipo: {data['tipo']}
-🏢 Piso: {data['piso']}
-🖥 Sistema: {data['sistema']}
-
-📝 Descripción:
-{descripcion}
-"""
-)
+        chat_id=GROUP_ID,
+        text=f"🆕 TICKET #{ticket_id}\nEstado: ABIERTO\n\n{descripcion}"
+    )
 
     cur.execute("UPDATE tickets SET message_id=%s WHERE id=%s", (msg.message_id, ticket_id))
     conn.commit()
@@ -171,93 +169,10 @@ Creado: {now.strftime("%d/%m/%Y %H:%M")}
     conn.close()
 
     del user_states[user_id]
-    await update.message.reply_text(f"✅ Ticket #{ticket_id} creado")
 
-# ==============================
-# PROCESO (CONCURRENCIA REAL)
-# ==============================
+    await update_dashboard(context)
 
-async def proceso(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    if user_id not in SOPORTE_IDS and user_id not in ADMIN_IDS:
-        return await update.message.reply_text("⛔ Sin permisos")
-
-    if not context.args:
-        return await update.message.reply_text("Uso: /proceso <id>")
-
-    ticket_id = int(context.args[0])
-
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("""
-        UPDATE tickets
-        SET estado='EN PROCESO',
-            asignado_a=%s,
-            fecha_actualizacion=%s
-        WHERE id=%s
-        AND estado='ABIERTO'
-        RETURNING id;
-    """, (user_id, now_utc(), ticket_id))
-
-    result = cur.fetchone()
-    conn.commit()
-
-    cur.close()
-    conn.close()
-
-    if result:
-        await update.message.reply_text(f"✅ Ticket {ticket_id} tomado")
-    else:
-        await update.message.reply_text("❌ Ya fue tomado por otro técnico")
-
-# ==============================
-# CERRAR (PERMISOS REALES)
-# ==============================
-
-async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    if not context.args:
-        return await update.message.reply_text("Uso: /cerrar <id>")
-
-    ticket_id = int(context.args[0])
-
-    conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute("SELECT asignado_a FROM tickets WHERE id=%s", (ticket_id,))
-    row = cur.fetchone()
-
-    if not row:
-        return await update.message.reply_text("❌ No existe")
-
-    assigned_to = row[0]
-
-    if not (user_id in ADMIN_IDS or assigned_to == user_id):
-        return await update.message.reply_text("⛔ No autorizado")
-
-    cur.execute("""
-        UPDATE tickets
-        SET estado='CERRADO',
-            closed_at=%s,
-            closed_by=%s
-        WHERE id=%s
-        AND estado!='CERRADO'
-        RETURNING id;
-    """, (now_utc(), user_id, ticket_id))
-
-    result = cur.fetchone()
-    conn.commit()
-
-    cur.close()
-    conn.close()
-
-    if result:
-        await update.message.reply_text(f"✅ Ticket {ticket_id} cerrado")
-    else:
-        await update.message.reply_text("⚠️ Ya estaba cerrado")
+    await update.message.reply_text(f"Ticket #{ticket_id} creado")
 
 # ==============================
 # MAIN
@@ -267,10 +182,11 @@ if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("proceso", proceso))
-    app.add_handler(CommandHandler("cerrar", cerrar))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-    print("🚀 BOT LISTO")
-    app.run_polling(drop_pending_updates=True)
+    # 🔥 DASHBOARD AUTO REFRESH
+    app.job_queue.run_repeating(update_dashboard, interval=60, first=10)
+
+    print("BOT CON DASHBOARD ACTIVO")
+    app.run_polling()
