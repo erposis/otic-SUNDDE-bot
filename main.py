@@ -132,6 +132,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     descripcion = update.message.text
     now_time = now_local()
+
     sla_respuesta = calcular_sla(state["prioridad"], now_time)
     sla_cierre = calcular_sla(state["prioridad"], now_time)
 
@@ -139,45 +140,46 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cur = conn.cursor()
 
     cur.execute("""
-        cur.execute("""
-    INSERT INTO tickets (
-        usuario_id, usuario_nombre, tipo, piso, sistema,
-        descripcion, estado, asignado_a, prioridad,
-        fecha_creacion, fecha_actualizacion,
-        sla_respuesta_vence, sla_cierre_vence, sla_estado
-    )
-    VALUES (%s,%s,%s,%s,%s,%s,'ABIERTO',NULL,%s,%s,%s,%s,%s,'OK')
-    RETURNING id;
-""", (
-    uid,
-    update.message.from_user.full_name,
-    state["tipo"],
-    state["piso"],
-    state["sistema"],
-    descripcion,
-    state["prioridad"],
-    now_time,
-    now_time,
-    sla_respuesta,
-    sla_cierre
-))
+        INSERT INTO tickets (
+            usuario_id, usuario_nombre, tipo, piso, sistema,
+            descripcion, estado, asignado_a, prioridad,
+            fecha_creacion, fecha_actualizacion,
+            sla_respuesta_vence, sla_cierre_vence, sla_estado
+        )
+        VALUES (%s,%s,%s,%s,%s,%s,'ABIERTO',NULL,%s,%s,%s,%s,%s,'OK')
+        RETURNING id;
+    """, (
+        uid,
+        update.message.from_user.full_name,
+        state["tipo"],
+        state["piso"],
+        state["sistema"],
+        descripcion,
+        state["prioridad"],
+        now_time,
+        now_time,
+        sla_respuesta,
+        sla_cierre
+    ))
+
     ticket_id = cur.fetchone()[0]
     conn.commit()
 
     text = f"""
-    🆕 TICKET #{ticket_id}
-    Prioridad: {prioridad_icono(state['prioridad'])} {state['prioridad']}
-    Estado: 🟢 ABIERTO
-    Creado: {now_time.strftime("%d/%m/%Y %H:%M")}
+🆕 TICKET #{ticket_id}
+Prioridad: {prioridad_icono(state['prioridad'])} {state['prioridad']}
+Estado: 🟢 ABIERTO
+Creado: {now_time.strftime("%d/%m/%Y %H:%M")}
 
-    👤 Usuario: {update.message.from_user.full_name}
-    🧩 Tipo: {state['tipo']}
-    🏢 Piso: {state['piso']}
-    🖥 Sistema: {state['sistema']}
+👤 Usuario: {update.message.from_user.full_name}
+🧩 Tipo: {state['tipo']}
+🏢 Piso: {state['piso']}
+🖥 Sistema: {state['sistema']}
 
-    📝 Descripción:
-    {descripcion}
-    """
+📝 Descripción:
+{descripcion}
+"""
+
     msg = await context.bot.send_message(chat_id=GROUP_ID, text=text)
 
     cur.execute(
@@ -192,7 +194,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     del user_states[uid]
 
     await update.message.reply_text(f"Ticket #{ticket_id} creado.")
-
+    
 # =========================
 # CAMBIO DE ESTADO
 # =========================
