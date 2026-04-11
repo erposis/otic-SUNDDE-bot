@@ -307,6 +307,14 @@ async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
     """, (now_time,))
     print("SLA VENCIDOS:", cur.fetchone()[0])
 
+    cur.execute("""
+    SELECT id, prioridad, sla_estado
+    FROM tickets
+    WHERE estado != 'CERRADO'
+    AND sla_cierre_vence IS NOT NULL
+    """)
+    tickets = cur.fetchall()
+
     # 🔴 SLA VENCIDO
     cur.execute("""
         UPDATE tickets
@@ -327,7 +335,37 @@ async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
         AND sla_estado = 'OK'
     """, (now_time, now_time + timedelta(minutes=10)))
 
-    conn.commit()
+     cur.execute("""
+    SELECT id, prioridad, sla_estado
+    FROM tickets
+    WHERE estado != 'CERRADO'
+    """)
+    updated = cur.fetchall()
+
+    for old, new in zip(tickets, updated):
+
+        ticket_id = new[0]
+        prioridad = new[1]
+        estado_nuevo = new[2]
+        estado_viejo = old[2]
+
+        if estado_nuevo != estado_viejo:
+
+            if estado_nuevo == "WARNING":
+                mensaje = f"🟡 SLA en riesgo - Ticket #{ticket_id}"
+
+            elif estado_nuevo == "BREACHED":
+                mensaje = f"🔴 SLA vencido - Ticket #{ticket_id}"
+
+            else:
+                continue
+
+            await context.bot.send_message(
+                chat_id=GROUP_ID,
+                text=mensaje
+            )
+    
+conn.commit()
     cur.close()
     conn.close()
 
