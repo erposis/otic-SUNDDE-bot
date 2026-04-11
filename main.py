@@ -319,7 +319,7 @@ async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
     cur.execute("""
         UPDATE tickets
         SET sla_estado = 'BREACHED'
-        WHERE estado != 'CERRADO'
+        WHERE estado NOT IN ('CERRADO', 'EN_PROCESO')
         AND sla_cierre_vence IS NOT NULL
         AND sla_cierre_vence < %s
         AND sla_estado != 'BREACHED'
@@ -329,11 +329,12 @@ async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
     cur.execute("""
         UPDATE tickets
         SET sla_estado = 'WARNING'
-        WHERE estado != 'CERRADO'
+        WHERE estado NOT IN ('CERRADO', 'EN_PROCESO')
         AND sla_cierre_vence IS NOT NULL
-        AND sla_cierre_vence BETWEEN %s AND %s
+        AND sla_cierre_vence <= %s
+        AND sla_cierre_vence > %s
         AND sla_estado = 'OK'
-    """, (now_time, now_time + timedelta(minutes=10)))
+    """, (now_time + timedelta(minutes=10), now_time))
 
     cur.execute("""
     SELECT id, prioridad, sla_estado
