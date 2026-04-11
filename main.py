@@ -55,7 +55,7 @@ def calcular_sla(prioridad, base_time):
     if prioridad == "Alta":
         minutos = 30
     else:
-        minutos = 120  # Media y Baja
+        minutos = 60  # Media y Baja
 
     return base_time + timedelta(minutes=minutos)
 
@@ -213,6 +213,11 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
     conn = get_connection()
     cur = conn.cursor()
 
+    if nuevo_estado in ["EN PROCESO", "CERRADO"]:
+        sla_estado = "STOPPED"
+    else:
+        sla_estado = "OK"
+    
     cur.execute("""
         SELECT asignado_a, message_id, tipo, piso, sistema,
                descripcion, prioridad, usuario_nombre, usuario_id
@@ -237,9 +242,10 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
         UPDATE tickets
         SET estado=%s,
             asignado_a=%s,
-            fecha_actualizacion=%s
+            fecha_actualizacion=%s,
+            sla_estado = %s
         WHERE id=%s
-    """, (estado, operador, now_time, ticket_id))
+    """, (estado, operador, now_time, ticket_id, sla_estado))
 
     conn.commit()
 
@@ -319,7 +325,7 @@ async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
     cur.execute("""
         UPDATE tickets
         SET sla_estado = 'BREACHED'
-        WHERE estado NOT IN ('CERRADO', 'EN_PROCESO')
+        WHERE estado NOT IN ('CERRADO', 'EN PROCESO')
         AND sla_cierre_vence IS NOT NULL
         AND sla_cierre_vence < %s
         AND sla_estado != 'BREACHED'
@@ -329,7 +335,7 @@ async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
     cur.execute("""
         UPDATE tickets
         SET sla_estado = 'WARNING'
-        WHERE estado NOT IN ('CERRADO', 'EN_PROCESO')
+        WHERE estado NOT IN ('CERRADO', 'EN PROCESO')
         AND sla_cierre_vence IS NOT NULL
         AND sla_cierre_vence <= %s
         AND sla_cierre_vence > %s
