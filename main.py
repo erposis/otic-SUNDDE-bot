@@ -213,7 +213,7 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
     conn = get_connection()
     cur = conn.cursor()
 
-    if nuevo_estado in ["EN PROCESO", "CERRADO"]:
+    if estado in ["EN PROCESO", "CERRADO"]:
         sla_estado = "STOPPED"
     else:
         sla_estado = "OK"
