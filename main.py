@@ -290,91 +290,58 @@ async def cerrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Sin permisos")
     await cambiar_estado(update, context, "CERRADO")
 
-# =========================
-# FUNCION MONITOR SLA
-# =========================
+# ================================
+# FUNCION MONITOR SLA (CORREGIDA)
+# ================================
 
 async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
-    
     print("🔥 MONITOR SLA EJECUTÁNDOSE")
-    
     now_time = now_local()
-
     conn = get_connection()
     cur = conn.cursor()
+    try:
+        # 1️⃣ Marcar como BREACHED y devolver IDs de los que cambiaron
+        cur.execute("""
+            UPDATE tickets SET sla_estado = 'BREACHED'
+            WHERE estado NOT IN ('CERRADO', 'EN PROCESO')
+              AND sla_cierre_vence IS NOT NULL
+              AND sla_cierre_vence < %s
+              AND sla_estado != 'BREACHED'
+            RETURNING id, prioridad, usuario_nombre
+        """, (now_time,))
+        breached = cur.fetchall()
 
-    cur.execute("SELECT COUNT(*) FROM tickets WHERE estado != 'CERRADO'")
-    print("TICKETS ABIERTOS:", cur.fetchone()[0])
+        # 2️⃣ Marcar como WARNING y devolver IDs de los que cambiaron
+        cur.execute("""
+            UPDATE tickets SET sla_estado = 'WARNING'
+            WHERE estado NOT IN ('CERRADO', 'EN PROCESO')
+              AND sla_cierre_vence IS NOT NULL
+              AND sla_cierre_vence BETWEEN %s AND %s
+              AND sla_estado = 'OK'
+            RETURNING id, prioridad, usuario_nombre
+        """, (now_time, now_time + timedelta(minutes=10)))
+        warning = cur.fetchall()
 
-    cur.execute("""
-    SELECT COUNT(*) FROM tickets
-    WHERE estado != 'CERRADO'
-    AND sla_cierre_vence < %s
-    """, (now_time,))
-    print("SLA VENCIDOS:", cur.fetchone()[0])
+        conn.commit()
 
-    cur.execute("""
-    SELECT id, prioridad, sla_estado
-    FROM tickets
-    WHERE estado != 'CERRADO'
-    AND sla_cierre_vence IS NOT NULL
-    """)
-    tickets = cur.fetchall()
-
-    # 🔴 SLA VENCIDO
-    cur.execute("""
-        UPDATE tickets
-        SET sla_estado = 'BREACHED'
-        WHERE estado NOT IN ('CERRADO', 'EN PROCESO')
-        AND sla_cierre_vence IS NOT NULL
-        AND sla_cierre_vence < %s
-        AND sla_estado != 'BREACHED'
-    """, (now_time,))
-
-    # 🟡 SLA EN RIESGO (faltan <10 min)
-    cur.execute("""
-        UPDATE tickets
-        SET sla_estado = 'WARNING'
-        WHERE estado NOT IN ('CERRADO', 'EN PROCESO')
-        AND sla_cierre_vence IS NOT NULL
-        AND sla_cierre_vence <= %s
-        AND sla_cierre_vence > %s
-        AND sla_estado = 'OK'
-    """, (now_time + timedelta(minutes=10), now_time))
-
-    cur.execute("""
-    SELECT id, prioridad, sla_estado
-    FROM tickets
-    WHERE estado != 'CERRADO'
-    """)
-    updated = cur.fetchall()
-
-    for old, new in zip(tickets, updated):
-
-        ticket_id = new[0]
-        prioridad = new[1]
-        estado_nuevo = new[2]
-        estado_viejo = old[2]
-
-        if estado_nuevo != estado_viejo:
-
-            if estado_nuevo == "WARNING":
-                mensaje = f"🟡 SLA en riesgo - Ticket #{ticket_id}"
-
-            elif estado_nuevo == "BREACHED":
-                mensaje = f"🔴 SLA vencido - Ticket #{ticket_id}"
-
-            else:
-                continue
-
+        # 3️⃣ Enviar alertas SOLO por los tickets que realmente cambiaron
+        for tid, prio, user in breached:
             await context.bot.send_message(
-                chat_id=GROUP_ID,
-                text=mensaje
+                chat_id=GROUP_ID, 
+                text=f"🔴 SLA VENCIDO - Ticket #{tid} | {user} | Prioridad: {prio}"
             )
-    
-    conn.commit()
-    cur.close()
-    conn.close()
+            
+        for tid, prio, user in warning:
+            await context.bot.send_message(
+                chat_id=GROUP_ID, 
+                text=f"🟡 SLA en riesgo (<10min) - Ticket #{tid} | {user} | Prioridad: {prio}"
+            )
+
+    except Exception as e:
+        print(f"❌ Error en monitor_sla: {e}")
+    finally:
+        cur.close()
+        conn.close()
 
 # =========================
 # MAIN
