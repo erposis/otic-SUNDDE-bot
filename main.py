@@ -335,7 +335,7 @@ async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
         AND sla_estado = 'OK'
     """, (now_time, now_time + timedelta(minutes=10)))
 
-     cur.execute("""
+    cur.execute("""
     SELECT id, prioridad, sla_estado
     FROM tickets
     WHERE estado != 'CERRADO'
@@ -365,7 +365,7 @@ async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
                 text=mensaje
             )
     
-conn.commit()
+    conn.commit()
     cur.close()
     conn.close()
 
