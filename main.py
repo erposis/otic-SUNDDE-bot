@@ -245,7 +245,7 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
             fecha_actualizacion=%s,
             sla_estado = %s
         WHERE id=%s
-    """, (estado, operador, now_time, ticket_id, sla_estado))
+    """, (estado, operador, now_time, sla_estado, ticket_id))
 
     conn.commit()
 
