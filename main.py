@@ -63,6 +63,13 @@ def estado_icono(e):
     return {"ABIERTO": "🟢", "EN PROCESO": "🟡", "CERRADO": "🔴"}.get(e, "🟡")
 
 # =========================
+# ID
+# =========================
+
+async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"ID: {update.effective_user.id}")
+    
+# =========================
 # START
 # =========================
 
@@ -356,6 +363,7 @@ if __name__ == "__main__":
     job_queue = app.job_queue
     job_queue.run_repeating(monitor_sla, interval=60, first=10)
 
+    app.add_handler(CommandHandler("id", myid))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
