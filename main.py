@@ -468,7 +468,7 @@ async def tablero(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
 
         if not tickets:
-            lineas.append("✅ No hay tickets pendientes ni en proceso.")
+            lineas.append("✅ Nada Pendiente.")
         else:
             abiertos = [t for t in tickets if t[1] == 'ABIERTO']
             en_proceso = [t for t in tickets if t[1] == 'EN PROCESO']
@@ -478,7 +478,7 @@ async def tablero(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 for tid, _, prio, asig, sla, vence in abiertos:
                     sla_icon = {"BREACHED": "🔴", "WARNING": "🟡", "OK": "🟢"}.get(sla, "⚪")
                     vence_str = vence.strftime("%H:%M") if vence else "N/A"
-                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'Sin asignar'} | {sla_icon} {vence_str}")
+                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'S/A'} | {sla_icon} {vence_str}")
                 lineas.append("")
 
             if en_proceso:
@@ -486,7 +486,7 @@ async def tablero(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 for tid, _, prio, asig, sla, vence in en_proceso:
                     sla_icon = {"BREACHED": "🔴", "WARNING": "🟡", "OK": "🟢"}.get(sla, "⚪")
                     vence_str = vence.strftime("%H:%M") if vence else "N/A"
-                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'Sin asignar'} | {sla_icon} {vence_str}")
+                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'S/A'} | {sla_icon} {vence_str}")
                 lineas.append("")
 
         msg_text = "\n".join(lineas).strip()
@@ -537,9 +537,9 @@ async def auto_tablero(context: ContextTypes.DEFAULT_TYPE):
         """)
         tickets = cur.fetchall()
 
-        lineas = ["📋 TABLERO SOPORTE OTIC", f"🕒 Actualizado: {ahora.strftime('%H:%M')}", ""]
+        lineas = ["📋 TABLERO", f"🕒: {ahora.strftime('%H:%M')}", ""]
         if not tickets:
-            lineas.append("✅ No hay tickets pendientes ni en proceso.")
+            lineas.append("✅ Sin Tickets.")
         else:
             abiertos = [t for t in tickets if t[1] == 'ABIERTO']
             en_proceso = [t for t in tickets if t[1] == 'EN PROCESO']
@@ -549,14 +549,14 @@ async def auto_tablero(context: ContextTypes.DEFAULT_TYPE):
                 for tid, _, prio, asig, sla, vence in abiertos:
                     sla_icon = {"BREACHED": "🔴", "WARNING": "🟡", "OK": "🟢"}.get(sla, "⚪")
                     vence_str = vence.strftime("%H:%M") if vence else "N/A"
-                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'Sin asignar'} | {sla_icon} {vence_str}")
+                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'S/A'} | {sla_icon} {vence_str}")
                 lineas.append("")
             if en_proceso:
                 lineas.append("🟡 EN PROCESO:")
                 for tid, _, prio, asig, sla, vence in en_proceso:
                     sla_icon = {"BREACHED": "🔴", "WARNING": "🟡", "OK": "🟢"}.get(sla, "⚪")
                     vence_str = vence.strftime("%H:%M") if vence else "N/A"
-                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'Sin asignar'} | {sla_icon} {vence_str}")
+                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'S/A'} | {sla_icon} {vence_str}")
                 lineas.append("")
 
         msg_text = "\n".join(lineas).strip()
