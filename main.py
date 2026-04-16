@@ -462,8 +462,8 @@ async def tablero(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         ahora = now_local().strftime("%H:%M")
         lineas = [
-            "📋 TABLERO SOPORTE OTIC",
-            f"🕒 Actualizado: {ahora}",
+            "📋 TABLERO",
+            f"🕒: {ahora}",
             ""
         ]
 
@@ -520,7 +520,7 @@ async def tablero(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def auto_tablero(context: ContextTypes.DEFAULT_TYPE):
     ahora = now_local()
     # Horario laboral: 08:00 a 15:59. Fuera de este rango, se ignora.
-    if not (8 <= ahora.hour < 16):
+    if not (0 <= ahora.hour < 16):
         return
 
     dashboard_id = os.getenv("DASHBOARD_MSG_ID")
@@ -556,7 +556,7 @@ async def auto_tablero(context: ContextTypes.DEFAULT_TYPE):
                 for tid, _, prio, asig, sla, vence in abiertos:
                     sla_icon = {"BREACHED": "🔴", "WARNING": "🟡", "OK": "🟢"}.get(sla, "⚪")
                     vence_str = vence.strftime("%H:%M") if vence else "N/A"
-                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'Sin asignar'} | {sla_icon} {vence_str}")
+                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'No Asig'} | {sla_icon} {vence_str}")
                 lineas.append("")
             if en_proceso:
                 lineas.append("🟡 EN PROCESO:")
@@ -589,7 +589,7 @@ if __name__ == "__main__":
     job_queue.run_repeating(monitor_sla, interval=60, first=10)
 
     app.add_handler(CommandHandler("tablero", tablero))
-    app.job_queue.run_repeating(auto_tablero, interval=900, first=15)  # 900s = 15 min
+    app.job_queue.run_repeating(auto_tablero, interval=90, first=15)  # 900s = 15 min
     app.add_handler(CommandHandler("id", myid))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
