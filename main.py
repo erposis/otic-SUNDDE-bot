@@ -208,7 +208,7 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
     conn = get_connection()
     cur = conn.cursor()
     try:
-        # 1. Obtener datos actuales
+        # 1. Obtener datos actuales (incluyendo sla_estado y cerrado_por)
         cur.execute("""
             SELECT asignado_a, message_id, tipo, piso, sistema,
                    descripcion, prioridad, usuario_nombre, usuario_id, sla_estado
@@ -219,6 +219,7 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
             await update.message.reply_text("❌ Ticket no encontrado")
             return
 
+        # Desempaquetar (el último es sla_estado)
         asignado, message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre, usuario_id, sla_estado_actual = row
 
         # 2. Validaciones de permisos
@@ -227,13 +228,13 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
                 await update.message.reply_text("🔒 No autorizado para cerrar")
                 return
 
-        # 3. Lógica de SLA y Auditoría
+        # 3. Lógica de Datos (Auditoría y SLA)
         if estado == "EN PROCESO":
             sla_nuevo = "OK"
             asignado_a_nuevo = operador
             cerrado_por_nuevo = None
         elif estado == "CERRADO":
-            # Al cerrar: Mantenemos SLA histórico, técnico original y registramos quién cierra
+            # Al cerrar: Mantenemos el técnico original, registramos quién cierra y preservamos el estado SLA
             sla_nuevo = sla_estado_actual if sla_estado_actual not in [None, "STOPPED"] else "OK"
             asignado_a_nuevo = asignado
             cerrado_por_nuevo = operador
@@ -242,7 +243,7 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
             asignado_a_nuevo = operador
             cerrado_por_nuevo = None
 
-        # 4. Actualizar BD según caso
+        # 4. Actualizar BD (Diferente SQL si es CERRAR o PROCESO)
         if estado == "CERRADO":
             cur.execute("""
                 UPDATE tickets
@@ -258,7 +259,7 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
         
         conn.commit()
 
-        # 5. Mensaje (✅ FIX PYTHON 3.11: Sacamos la lógica fuera de las llaves)
+        # 5. Formato del Mensaje (SIN sangría para que Telegram haga saltos de línea)
         cierre_info = f"Cerrado por: {cerrado_por_nuevo}" if estado == "CERRADO" else ""
         
         text = f"""
