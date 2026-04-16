@@ -587,9 +587,9 @@ if __name__ == "__main__":
     
     job_queue = app.job_queue
     job_queue.run_repeating(monitor_sla, interval=60, first=10)
-
+    
     app.add_handler(CommandHandler("tablero", tablero))
-    app.job_queue.run_repeating(auto_tablero, interval=90, first=15)  # 900s = 15 min
+    app.job_queue.run_repeating(auto_tablero, interval=900, first=15)  # 900s = 15 min
     app.add_handler(CommandHandler("id", myid))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
