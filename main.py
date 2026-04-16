@@ -259,15 +259,17 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
         conn.commit()
 
         # 5. Notificaciones
+        cierre_info = f"Cerrado por: {cerrado_por_nuevo}" if estado == "CERRADO" else ""
+        
         text = f"""
-        🆕 TICKET #{ticket_id}
-        Estado: {estado_icono(estado)} {estado}
-        Asignado: {asignado_a_nuevo}
-        {f"Cerrado por: {cerrado_por_nuevo}\n" if estado == "CERRADO" else ""}
-        👤 Usuario: {usuario_nombre}
-        🧩 Tipo: {tipo} | 🏢 Piso: {piso} | 🖥 Sistema: {sistema}
-        📝 {descripcion}
-        """
+🆕 TICKET #{ticket_id}
+Estado: {estado_icono(estado)} {estado}
+Asignado: {asignado_a_nuevo}
+{cierre_info}
+👤 Usuario: {usuario_nombre}
+🧩 Tipo: {tipo} | 🏢 Piso: {piso} | 🖥 Sistema: {sistema}
+📝 {descripcion}
+"""
         try:
             await context.bot.edit_message_text(chat_id=GROUP_ID, message_id=message_id, text=text.strip())
         except BadRequest:
