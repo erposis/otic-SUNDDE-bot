@@ -520,7 +520,7 @@ async def tablero(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def auto_tablero(context: ContextTypes.DEFAULT_TYPE):
     ahora = now_local()
     # Horario laboral: 08:00 a 15:59. Fuera de este rango, se ignora.
-    if not (0 <= ahora.hour < 16):
+    if not (8 <= ahora.hour < 16):
         return
 
     dashboard_id = os.getenv("DASHBOARD_MSG_ID")
