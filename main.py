@@ -439,6 +439,142 @@ async def reporte(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         cur.close()
         conn.close()
+
+# =========================
+# COMANDO /TABLERO
+# =========================
+async def tablero(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS + SOPORTE_IDS:
+        return await update.message.reply_text("🔒 Sin permisos para ver el tablero.")
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT id, estado, prioridad, asignado_a, sla_estado, sla_cierre_vence
+            FROM tickets
+            WHERE estado IN ('ABIERTO', 'EN PROCESO')
+            ORDER BY
+                CASE prioridad WHEN 'Alta' THEN 1 WHEN 'Media' THEN 2 WHEN 'Baja' THEN 3 END,
+                sla_cierre_vence ASC
+        """)
+        tickets = cur.fetchall()
+
+        ahora = now_local().strftime("%H:%M")
+        lineas = [
+            "📋 TABLERO SOPORTE OTIC",
+            f"🕒 Actualizado: {ahora}",
+            ""
+        ]
+
+        if not tickets:
+            lineas.append("✅ No hay tickets pendientes ni en proceso.")
+        else:
+            abiertos = [t for t in tickets if t[1] == 'ABIERTO']
+            en_proceso = [t for t in tickets if t[1] == 'EN PROCESO']
+
+            if abiertos:
+                lineas.append("🟢 ABIERTOS:")
+                for tid, _, prio, asig, sla, vence in abiertos:
+                    sla_icon = {"BREACHED": "🔴", "WARNING": "🟡", "OK": "🟢"}.get(sla, "⚪")
+                    vence_str = vence.strftime("%H:%M") if vence else "N/A"
+                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'Sin asignar'} | {sla_icon} {vence_str}")
+                lineas.append("")
+
+            if en_proceso:
+                lineas.append("🟡 EN PROCESO:")
+                for tid, _, prio, asig, sla, vence in en_proceso:
+                    sla_icon = {"BREACHED": "🔴", "WARNING": "🟡", "OK": "🟢"}.get(sla, "⚪")
+                    vence_str = vence.strftime("%H:%M") if vence else "N/A"
+                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'Sin asignar'} | {sla_icon} {vence_str}")
+                lineas.append("")
+
+        msg_text = "\n".join(lineas).strip()
+        dashboard_id = os.getenv("DASHBOARD_MSG_ID")
+
+        if dashboard_id:
+            await context.bot.edit_message_text(chat_id=GROUP_ID, message_id=int(dashboard_id), text=msg_text)
+            if update.effective_message:
+                await update.message.reply_text("🔄 Tablero actualizado.")
+        else:
+            sent = await context.bot.send_message(chat_id=GROUP_ID, text=msg_text)
+            await context.bot.pin_chat_message(chat_id=GROUP_ID, message_id=sent.message_id, disable_notification=True)
+            await update.message.reply_text(
+                "📌 Tablero creado y fijado.\n"
+                "⚠️ Ve a Railway → Variables y agrega:\n"
+                f"`DASHBOARD_MSG_ID` = `{sent.message_id}`\n"
+                "Reinicia el bot para activar actualizaciones automáticas."
+            )
+
+    except Exception as e:
+        print(f"❌ Error en tablero: {e}")
+        if update.effective_message:
+            await update.message.reply_text("⚠️ Error al generar el tablero.")
+    finally:
+        cur.close()
+        conn.close()
+
+# =========================
+# ACTUALIZACIÓN AUTOMÁTICA (08:00 - 15:59)
+# =========================
+async def auto_tablero(context: ContextTypes.DEFAULT_TYPE):
+    ahora = now_local()
+    # Horario laboral: 08:00 a 15:59. Fuera de este rango, se ignora.
+    if not (8 <= ahora.hour < 16):
+        return
+
+    dashboard_id = os.getenv("DASHBOARD_MSG_ID")
+    if not dashboard_id:
+        return
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT id, estado, prioridad, asignado_a, sla_estado, sla_cierre_vence
+            FROM tickets
+            WHERE estado IN ('ABIERTO', 'EN PROCESO')
+            ORDER BY
+                CASE prioridad WHEN 'Alta' THEN 1 WHEN 'Media' THEN 2 WHEN 'Baja' THEN 3 END,
+                sla_cierre_vence ASC
+        """)
+        tickets = cur.fetchall()
+
+        lineas = [
+            "📋 TABLERO SOPORTE OTIC",
+            f"🕒 Actualizado: {ahora.strftime('%H:%M')}",
+            ""
+        ]
+        if not tickets:
+            lineas.append("✅ No hay tickets pendientes ni en proceso.")
+        else:
+            abiertos = [t for t in tickets if t[1] == 'ABIERTO']
+            en_proceso = [t for t in tickets if t[1] == 'EN PROCESO']
+
+            if abiertos:
+                lineas.append("🟢 ABIERTOS:")
+                for tid, _, prio, asig, sla, vence in abiertos:
+                    sla_icon = {"BREACHED": "🔴", "WARNING": "🟡", "OK": "🟢"}.get(sla, "⚪")
+                    vence_str = vence.strftime("%H:%M") if vence else "N/A"
+                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'Sin asignar'} | {sla_icon} {vence_str}")
+                lineas.append("")
+            if en_proceso:
+                lineas.append("🟡 EN PROCESO:")
+                for tid, _, prio, asig, sla, vence in en_proceso:
+                    sla_icon = {"BREACHED": "🔴", "WARNING": "🟡", "OK": "🟢"}.get(sla, "⚪")
+                    vence_str = vence.strftime("%H:%M") if vence else "N/A"
+                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'Sin asignar'} | {sla_icon} {vence_str}")
+                lineas.append("")
+
+        msg_text = "\n".join(lineas).strip()
+        await context.bot.edit_message_text(chat_id=GROUP_ID, message_id=int(dashboard_id), text=msg_text)
+
+    except Exception as e:
+        print(f"❌ Error auto_tablero: {e}")
+    finally:
+        cur.close()
+        conn.close()
+        
 # =========================
 # MAIN
 # =========================
@@ -452,6 +588,8 @@ if __name__ == "__main__":
     job_queue = app.job_queue
     job_queue.run_repeating(monitor_sla, interval=60, first=10)
 
+    app.add_handler(CommandHandler("tablero", tablero))
+    app.job_queue.run_repeating(auto_tablero, interval=900, first=15)  # 900s = 15 min
     app.add_handler(CommandHandler("id", myid))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
