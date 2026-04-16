@@ -130,7 +130,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     uid = update.message.from_user.id
     state = user_states.get(uid)
 
@@ -139,40 +138,32 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     descripcion = update.message.text
     now_time = now_local()
-
     sla_respuesta = calcular_sla(state["prioridad"], now_time)
     sla_cierre = calcular_sla(state["prioridad"], now_time)
 
-    conn = get_connection()
-    cur = conn.cursor()
+    conn = None
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO tickets (
+                usuario_id, usuario_nombre, tipo, piso, sistema,
+                descripcion, estado, asignado_a, prioridad,
+                fecha_creacion, fecha_actualizacion,
+                sla_respuesta_vence, sla_cierre_vence, sla_estado
+            )
+            VALUES (%s,%s,%s,%s,%s,%s,'ABIERTO',NULL,%s,%s,%s,%s,%s,'OK')
+            RETURNING id;
+        """, (
+            uid, update.message.from_user.full_name,
+            state["tipo"], state["piso"], state["sistema"],
+            descripcion, state["prioridad"],
+            now_time, now_time, sla_respuesta, sla_cierre
+        ))
+        ticket_id = cur.fetchone()[0]
+        conn.commit()
 
-    cur.execute("""
-        INSERT INTO tickets (
-            usuario_id, usuario_nombre, tipo, piso, sistema,
-            descripcion, estado, asignado_a, prioridad,
-            fecha_creacion, fecha_actualizacion,
-            sla_respuesta_vence, sla_cierre_vence, sla_estado
-        )
-        VALUES (%s,%s,%s,%s,%s,%s,'ABIERTO',NULL,%s,%s,%s,%s,%s,'OK')
-        RETURNING id;
-    """, (
-        uid,
-        update.message.from_user.full_name,
-        state["tipo"],
-        state["piso"],
-        state["sistema"],
-        descripcion,
-        state["prioridad"],
-        now_time,
-        now_time,
-        sla_respuesta,
-        sla_cierre
-    ))
-
-    ticket_id = cur.fetchone()[0]
-    conn.commit()
-
-    text = f"""
+        text = f"""
 🆕 TICKET #{ticket_id}
 Prioridad: {prioridad_icono(state['prioridad'])} {state['prioridad']}
 Estado: 🟢 ABIERTO
@@ -186,30 +177,27 @@ Creado: {now_time.strftime("%d/%m/%Y %H:%M")}
 📝 Descripción:
 {descripcion}
 """
+        msg = await context.bot.send_message(chat_id=GROUP_ID, text=text.strip())
 
-    msg = await context.bot.send_message(chat_id=GROUP_ID, text=text)
+        cur.execute("UPDATE tickets SET message_id=%s WHERE id=%s", (msg.message_id, ticket_id))
+        conn.commit()
+        del user_states[uid]
+        await update.message.reply_text(f"✅ Ticket #{ticket_id} creado.")
 
-    cur.execute(
-        "UPDATE tickets SET message_id=%s WHERE id=%s",
-        (msg.message_id, ticket_id)
-    )
-
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    del user_states[uid]
-
-    await update.message.reply_text(f"Ticket #{ticket_id} creado.")
+    except Exception as e:
+        print(f"❌ Error creando ticket: {e}")
+        await update.message.reply_text("❌ Error al crear el ticket. Inténtalo de nuevo.")
+    finally:
+        if conn:
+            conn.close()
     
 # =========================
 # CAMBIO DE ESTADO
 # =========================
 
 async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, estado):
-
     if not context.args:
-        await update.message.reply_text("Usa ID del ticket.")
+        await update.message.reply_text("⚠️ Usa: /proceso <ID> o /cerrar <ID>")
         return
 
     ticket_id = int(context.args[0])
@@ -217,46 +205,38 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
     operador_id = update.effective_user.id
     now_time = now_local()
 
-    conn = get_connection()
-    cur = conn.cursor()
+    conn = None
+    try:
+        conn = get_connection()
+        cur = conn.cursor()
 
-    if estado in ["EN PROCESO", "CERRADO"]:
-        sla_estado = "STOPPED"
-    else:
-        sla_estado = "OK"
-    
-    cur.execute("""
-        SELECT asignado_a, message_id, tipo, piso, sistema,
-               descripcion, prioridad, usuario_nombre, usuario_id
-        FROM tickets
-        WHERE id=%s
-    """, (ticket_id,))
-
-    row = cur.fetchone()
-
-    if not row:
-        await update.message.reply_text("Ticket no encontrado")
-        return
-
-    asignado, message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre, usuario_id = row
-
-    if estado == "CERRADO":
-        if operador_id not in ADMIN_IDS and asignado != operador:
-            await update.message.reply_text("No autorizado para cerrar")
+        if estado in ["EN PROCESO", "CERRADO"]:
+            sla_estado = "STOPPED"
+        else:
+            sla_estado = "OK"
+        
+        cur.execute("""
+            SELECT asignado_a, message_id, tipo, piso, sistema,
+                   descripcion, prioridad, usuario_nombre, usuario_id
+            FROM tickets WHERE id=%s
+        """, (ticket_id,))
+        row = cur.fetchone()
+        if not row:
+            await update.message.reply_text("❌ Ticket no encontrado")
             return
 
-    cur.execute("""
-        UPDATE tickets
-        SET estado=%s,
-            asignado_a=%s,
-            fecha_actualizacion=%s,
-            sla_estado = %s
-        WHERE id=%s
-    """, (estado, operador, now_time, sla_estado, ticket_id))
+        asignado, message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre, usuario_id = row
 
-    conn.commit()
+        if estado == "CERRADO" and operador_id not in ADMIN_IDS and asignado != operador:
+            await update.message.reply_text("🔒 No autorizado para cerrar")
+            return
 
-    text = f"""
+        cur.execute("""
+            UPDATE tickets SET estado=%s, asignado_a=%s, fecha_actualizacion=%s, sla_estado=%s WHERE id=%s
+        """, (estado, operador, now_time, sla_estado, ticket_id))
+        conn.commit()
+
+        text = f"""
 🆕 TICKET #{ticket_id}
 Estado: {estado_icono(estado)} {estado}
 Asignado: {operador}
@@ -269,19 +249,20 @@ Asignado: {operador}
 📝 Descripción:
 {descripcion}
 """
+        try:
+            await context.bot.edit_message_text(chat_id=GROUP_ID, message_id=message_id, text=text.strip())
+        except BadRequest:
+            await context.bot.send_message(GROUP_ID, text=text.strip())
 
-    try:
-        await context.bot.edit_message_text(
-            chat_id=GROUP_ID,
-            message_id=message_id,
-            text=text
-        )
-    except BadRequest:
-        await context.bot.send_message(GROUP_ID, text)
+        await context.bot.send_message(usuario_id, f"📢 Tu ticket #{ticket_id} está: {estado}")
+        await update.message.reply_text(f"✅ Ticket #{ticket_id} -> {estado}")
 
-    await context.bot.send_message(usuario_id, f"Tu ticket #{ticket_id} está: {estado}")
-    await update.message.reply_text("Estado actualizado.")
-
+    except Exception as e:
+        print(f"❌ Error cambiando estado: {e}")
+        await update.message.reply_text("❌ Error al actualizar. Inténtalo de nuevo.")
+    finally:
+        if conn:
+            conn.close()
 # =========================
 # COMANDOS
 # =========================
