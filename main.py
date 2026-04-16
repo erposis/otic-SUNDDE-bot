@@ -208,7 +208,7 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
     conn = get_connection()
     cur = conn.cursor()
     try:
-        # 1. Obtener datos actuales (incluyendo sla_estado y cerrado_por)
+        # 1. Obtener estado actual del ticket
         cur.execute("""
             SELECT asignado_a, message_id, tipo, piso, sistema,
                    descripcion, prioridad, usuario_nombre, usuario_id, sla_estado
@@ -219,69 +219,64 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
             await update.message.reply_text("❌ Ticket no encontrado")
             return
 
-        # Desempaquetar (el último es sla_estado)
         asignado, message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre, usuario_id, sla_estado_actual = row
 
-        # 2. Validaciones de permisos
+        # 2. Validar permisos
         if estado == "CERRADO":
             if operador_id not in ADMIN_IDS and asignado != operador:
-                await update.message.reply_text("🔒 No autorizado para cerrar")
+                await update.message.reply_text("🔒 No autorizado para cerrar este ticket.")
                 return
 
-        # 3. Lógica de Datos (Auditoría y SLA)
-        if estado == "EN PROCESO":
-            sla_nuevo = "OK"
-            asignado_a_nuevo = operador
-            cerrado_por_nuevo = None
-        elif estado == "CERRADO":
-            # Al cerrar: Mantenemos el técnico original, registramos quién cierra y preservamos el estado SLA
+        # 3. Preparar datos para UPDATE
+        if estado == "CERRADO":
+            # Preservamos historial SLA, mantenemos técnico original, registramos quién cierra
             sla_nuevo = sla_estado_actual if sla_estado_actual not in [None, "STOPPED"] else "OK"
             asignado_a_nuevo = asignado
             cerrado_por_nuevo = operador
-        else:
-            sla_nuevo = "OK"
-            asignado_a_nuevo = operador
-            cerrado_por_nuevo = None
-
-        # 4. Actualizar BD (Diferente SQL si es CERRAR o PROCESO)
-        if estado == "CERRADO":
+            
             cur.execute("""
                 UPDATE tickets
                 SET estado=%s, asignado_a=%s, fecha_actualizacion=%s, sla_estado=%s, cerrado_por=%s
                 WHERE id=%s
             """, (estado, asignado_a_nuevo, now_time, sla_nuevo, cerrado_por_nuevo, ticket_id))
         else:
+            sla_nuevo = "OK"
+            asignado_a_nuevo = operador
+            cerrado_por_nuevo = None
+            
             cur.execute("""
                 UPDATE tickets
                 SET estado=%s, asignado_a=%s, fecha_actualizacion=%s, sla_estado=%s
                 WHERE id=%s
             """, (estado, asignado_a_nuevo, now_time, sla_nuevo, ticket_id))
-        
+
         conn.commit()
 
-        # 5. Formato del Mensaje (SIN sangría para que Telegram haga saltos de línea)
-        cierre_info = f"Cerrado por: {cerrado_por_nuevo}" if estado == "CERRADO" else ""
+        # 4. Formatear mensaje (sin sangría para Telegram)
+        cierre_info = f"\n🔒 Cerrado por: {cerrado_por_nuevo}" if estado == "CERRADO" else ""
         
         text = f"""
 🆕 TICKET #{ticket_id}
 Estado: {estado_icono(estado)} {estado}
-Asignado: {asignado_a_nuevo}
-{cierre_info}
+Asignado: {asignado_a_nuevo}{cierre_info}
 👤 Usuario: {usuario_nombre}
 🧩 Tipo: {tipo} | 🏢 Piso: {piso} | 🖥 Sistema: {sistema}
 📝 {descripcion}
 """
+        # 5. Actualizar mensaje en grupo
         try:
             await context.bot.edit_message_text(chat_id=GROUP_ID, message_id=message_id, text=text.strip())
         except BadRequest:
             await context.bot.send_message(GROUP_ID, text=text.strip())
 
+        # 6. Notificar al usuario y confirmar
         await context.bot.send_message(usuario_id, f"📢 Tu ticket #{ticket_id} está: {estado}")
         await update.message.reply_text(f"✅ Ticket #{ticket_id} -> {estado}")
 
     except Exception as e:
-        print(f"❌ Error cambiando estado: {e}")
-        await update.message.reply_text("❌ Error al actualizar. Inténtalo de nuevo.")
+        # 🔍 Esto imprimirá el error real en Railway para que lo veamos
+        print(f"❌ ERROR CRÍTICO en cambiar_estado (ID {ticket_id}): {type(e).__name__} - {e}")
+        await update.message.reply_text("❌ Error al actualizar la BD. Revisa los logs de Railway.")
     finally:
         cur.close()
         conn.close()
