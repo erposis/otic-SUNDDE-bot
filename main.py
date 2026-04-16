@@ -208,7 +208,7 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
     conn = get_connection()
     cur = conn.cursor()
     try:
-        # 1. Obtener datos actuales del ticket
+        # 1. Obtener datos actuales
         cur.execute("""
             SELECT asignado_a, message_id, tipo, piso, sistema,
                    descripcion, prioridad, usuario_nombre, usuario_id, sla_estado
@@ -233,7 +233,7 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
             asignado_a_nuevo = operador
             cerrado_por_nuevo = None
         elif estado == "CERRADO":
-            # Mantener histórico SLA y técnico original; registrar quién cierra
+            # Al cerrar: Mantenemos SLA histórico, técnico original y registramos quién cierra
             sla_nuevo = sla_estado_actual if sla_estado_actual not in [None, "STOPPED"] else "OK"
             asignado_a_nuevo = asignado
             cerrado_por_nuevo = operador
@@ -242,7 +242,7 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
             asignado_a_nuevo = operador
             cerrado_por_nuevo = None
 
-        # 4. Actualizar BD según el caso
+        # 4. Actualizar BD según caso
         if estado == "CERRADO":
             cur.execute("""
                 UPDATE tickets
@@ -255,10 +255,10 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
                 SET estado=%s, asignado_a=%s, fecha_actualizacion=%s, sla_estado=%s
                 WHERE id=%s
             """, (estado, asignado_a_nuevo, now_time, sla_nuevo, ticket_id))
-
+        
         conn.commit()
 
-        # 5. Notificaciones
+        # 5. Mensaje (✅ FIX PYTHON 3.11: Sacamos la lógica fuera de las llaves)
         cierre_info = f"Cerrado por: {cerrado_por_nuevo}" if estado == "CERRADO" else ""
         
         text = f"""
@@ -278,10 +278,10 @@ Asignado: {asignado_a_nuevo}
         await context.bot.send_message(usuario_id, f"📢 Tu ticket #{ticket_id} está: {estado}")
         await update.message.reply_text(f"✅ Ticket #{ticket_id} -> {estado}")
 
-        except Exception as e:
+    except Exception as e:
         print(f"❌ Error cambiando estado: {e}")
         await update.message.reply_text("❌ Error al actualizar. Inténtalo de nuevo.")
-        finally:
+    finally:
         cur.close()
         conn.close()
     
