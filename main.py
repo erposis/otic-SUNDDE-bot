@@ -541,8 +541,8 @@ async def auto_tablero(context: ContextTypes.DEFAULT_TYPE):
         tickets = cur.fetchall()
 
         lineas = [
-            "📋 TABLERO SOPORTE OTIC",
-            f"🕒 Actualizado: {ahora.strftime('%H:%M')}",
+            "📋 TABLERO",
+            f"🕒: {ahora.strftime('%H:%M')}",
             ""
         ]
         if not tickets:
