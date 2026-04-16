@@ -205,19 +205,13 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
     operador_id = update.effective_user.id
     now_time = now_local()
 
-    conn = None
+    conn = get_connection()
+    cur = conn.cursor()
     try:
-        conn = get_connection()
-        cur = conn.cursor()
-
-        if estado in ["EN PROCESO", "CERRADO"]:
-            sla_estado = "STOPPED"
-        else:
-            sla_estado = "OK"
-        
+        # 1. Obtener datos actuales del ticket
         cur.execute("""
             SELECT asignado_a, message_id, tipo, piso, sistema,
-                   descripcion, prioridad, usuario_nombre, usuario_id
+                   descripcion, prioridad, usuario_nombre, usuario_id, sla_estado
             FROM tickets WHERE id=%s
         """, (ticket_id,))
         row = cur.fetchone()
@@ -225,29 +219,54 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
             await update.message.reply_text("❌ Ticket no encontrado")
             return
 
-        asignado, message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre, usuario_id = row
+        asignado, message_id, tipo, piso, sistema, descripcion, prioridad, usuario_nombre, usuario_id, sla_estado_actual = row
 
-        if estado == "CERRADO" and operador_id not in ADMIN_IDS and asignado != operador:
-            await update.message.reply_text("🔒 No autorizado para cerrar")
-            return
+        # 2. Validaciones de permisos
+        if estado == "CERRADO":
+            if operador_id not in ADMIN_IDS and asignado != operador:
+                await update.message.reply_text("🔒 No autorizado para cerrar")
+                return
 
-        cur.execute("""
-            UPDATE tickets SET estado=%s, asignado_a=%s, fecha_actualizacion=%s, sla_estado=%s WHERE id=%s
-        """, (estado, operador, now_time, sla_estado, ticket_id))
+        # 3. Lógica de SLA y Auditoría
+        if estado == "EN PROCESO":
+            sla_nuevo = "OK"
+            asignado_a_nuevo = operador
+            cerrado_por_nuevo = None
+        elif estado == "CERRADO":
+            # Mantener histórico SLA y técnico original; registrar quién cierra
+            sla_nuevo = sla_estado_actual if sla_estado_actual not in [None, "STOPPED"] else "OK"
+            asignado_a_nuevo = asignado
+            cerrado_por_nuevo = operador
+        else:
+            sla_nuevo = "OK"
+            asignado_a_nuevo = operador
+            cerrado_por_nuevo = None
+
+        # 4. Actualizar BD según el caso
+        if estado == "CERRADO":
+            cur.execute("""
+                UPDATE tickets
+                SET estado=%s, asignado_a=%s, fecha_actualizacion=%s, sla_estado=%s, cerrado_por=%s
+                WHERE id=%s
+            """, (estado, asignado_a_nuevo, now_time, sla_nuevo, cerrado_por_nuevo, ticket_id))
+        else:
+            cur.execute("""
+                UPDATE tickets
+                SET estado=%s, asignado_a=%s, fecha_actualizacion=%s, sla_estado=%s
+                WHERE id=%s
+            """, (estado, asignado_a_nuevo, now_time, sla_nuevo, ticket_id))
+
         conn.commit()
 
+        # 5. Notificaciones
         text = f"""
 🆕 TICKET #{ticket_id}
 Estado: {estado_icono(estado)} {estado}
-Asignado: {operador}
-
+Asignado: {asignado_a_nuevo}
+{f"Cerrado por: {cerrado_por_nuevo}\n" if estado == "CERRADO" else ""}
 👤 Usuario: {usuario_nombre}
-🧩 Tipo: {tipo}
-🏢 Piso: {piso}
-🖥 Sistema: {sistema}
-
-📝 Descripción:
-{descripcion}
+🧩 Tipo: {tipo} | 🏢 Piso: {piso} | 🖥 Sistema: {sistema}
+📝 {descripcion}
 """
         try:
             await context.bot.edit_message_text(chat_id=GROUP_ID, message_id=message_id, text=text.strip())
@@ -261,8 +280,8 @@ Asignado: {operador}
         print(f"❌ Error cambiando estado: {e}")
         await update.message.reply_text("❌ Error al actualizar. Inténtalo de nuevo.")
     finally:
-        if conn:
-            conn.close()
+        cur.close()
+        conn.close()
 # =========================
 # COMANDOS
 # =========================
