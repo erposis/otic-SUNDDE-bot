@@ -519,7 +519,7 @@ async def tablero(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # =========================
 async def auto_tablero(context: ContextTypes.DEFAULT_TYPE):
     ahora = now_local()
-    # Horario laboral: 08:00 a 15:59. Fuera de este rango, se ignora.
+    # Horario laboral: 08:00 a 15:59
     if not (8 <= ahora.hour < 16):
         return
 
@@ -532,19 +532,12 @@ async def auto_tablero(context: ContextTypes.DEFAULT_TYPE):
     try:
         cur.execute("""
             SELECT id, estado, prioridad, asignado_a, sla_estado, sla_cierre_vence
-            FROM tickets
-            WHERE estado IN ('ABIERTO', 'EN PROCESO')
-            ORDER BY
-                CASE prioridad WHEN 'Alta' THEN 1 WHEN 'Media' THEN 2 WHEN 'Baja' THEN 3 END,
-                sla_cierre_vence ASC
+            FROM tickets WHERE estado IN ('ABIERTO', 'EN PROCESO')
+            ORDER BY CASE prioridad WHEN 'Alta' THEN 1 WHEN 'Media' THEN 2 WHEN 'Baja' THEN 3 END, sla_cierre_vence ASC
         """)
         tickets = cur.fetchall()
 
-        lineas = [
-            "📋 TABLERO",
-            f"🕒: {ahora.strftime('%H:%M')}",
-            ""
-        ]
+        lineas = ["📋 TABLERO SOPORTE OTIC", f"🕒 Actualizado: {ahora.strftime('%H:%M')}", ""]
         if not tickets:
             lineas.append("✅ No hay tickets pendientes ni en proceso.")
         else:
@@ -556,7 +549,7 @@ async def auto_tablero(context: ContextTypes.DEFAULT_TYPE):
                 for tid, _, prio, asig, sla, vence in abiertos:
                     sla_icon = {"BREACHED": "🔴", "WARNING": "🟡", "OK": "🟢"}.get(sla, "⚪")
                     vence_str = vence.strftime("%H:%M") if vence else "N/A"
-                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'No Asig'} | {sla_icon} {vence_str}")
+                    lineas.append(f"  🎫 #{tid} | {prio} | {asig or 'Sin asignar'} | {sla_icon} {vence_str}")
                 lineas.append("")
             if en_proceso:
                 lineas.append("🟡 EN PROCESO:")
@@ -569,6 +562,12 @@ async def auto_tablero(context: ContextTypes.DEFAULT_TYPE):
         msg_text = "\n".join(lineas).strip()
         await context.bot.edit_message_text(chat_id=GROUP_ID, message_id=int(dashboard_id), text=msg_text)
 
+    except BadRequest as e:
+        # Si el mensaje fue borrado, lo logueamos y evitamos que el job falle
+        if "Message to edit not found" in str(e):
+            print("⚠️ Tablero borrado o desfijado. Ejecuta /tablero para recrearlo.")
+        else:
+            print(f"❌ BadRequest editando tablero: {e}")
     except Exception as e:
         print(f"❌ Error auto_tablero: {e}")
     finally:
