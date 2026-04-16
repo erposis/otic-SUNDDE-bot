@@ -352,6 +352,94 @@ async def monitor_sla(context: ContextTypes.DEFAULT_TYPE):
         conn.close()
 
 # =========================
+# COMANDO /REPORTE
+# =========================
+async def reporte(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS + SOPORTE_IDS:
+        return await update.message.reply_text("🔒 Sin permisos para ver reportes.")
+
+    # Filtro de tiempo
+    periodo = context.args[0].lower() if context.args else "mes"
+    now = now_local()
+    
+    if periodo == "hoy":
+        desde = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        titulo = "Hoy"
+    elif periodo == "semana":
+        desde = now - timedelta(days=7)
+        titulo = "Últimos 7 días"
+    else:
+        desde = now - timedelta(days=30)
+        titulo = "Últimos 30 días"
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        # 1️⃣ Tickets por estado
+        cur.execute("SELECT estado, COUNT(*) FROM tickets WHERE fecha_creacion >= %s GROUP BY estado", (desde,))
+        estados = dict(cur.fetchall())
+
+        # 2️⃣ Cumplimiento SLA (solo tickets cerrados en el periodo)
+        cur.execute("""
+            SELECT 
+                COUNT(*) FILTER (WHERE sla_estado = 'OK') as ok,
+                COUNT(*) FILTER (WHERE sla_estado IN ('WARNING', 'BREACHED')) as mal,
+                COUNT(*) as total
+            FROM tickets 
+            WHERE estado = 'CERRADO' AND fecha_actualizacion >= %s
+        """, (desde,))
+        sla_ok, sla_mal, sla_total = cur.fetchone()
+        sla_pct = (sla_ok / sla_total * 100) if sla_total > 0 else 100
+
+        # 3️⃣ Tiempo promedio de resolución (horas)
+        cur.execute("""
+            SELECT AVG(EXTRACT(EPOCH FROM (fecha_actualizacion - fecha_creacion))/3600)
+            FROM tickets 
+            WHERE estado = 'CERRADO' AND fecha_actualizacion >= %s
+        """, (desde,))
+        avg_h = cur.fetchone()[0] or 0
+
+        # 4️⃣ Top 3 agentes
+        cur.execute("""
+            SELECT asignado_a, COUNT(*) as c 
+            FROM tickets 
+            WHERE estado = 'CERRADO' AND asignado_a IS NOT NULL AND fecha_actualizacion >= %s
+            GROUP BY asignado_a 
+            ORDER BY c DESC 
+            LIMIT 3
+        """, (desde,))
+        agentes = cur.fetchall()
+
+        # Formato seguro para Python 3.11
+        estados_txt = "\n".join([f"• {estado_icono(e)} {e}: {c}" for e, c in estados.items()]) if estados else "• Sin datos"
+        agentes_txt = "\n".join([f"• {a}: {c} tickets" for a, c in agentes]) if agentes else "• Sin agentes activos"
+
+        msg = f"""
+📈 REPORTE DE SOPORTE OTIC
+🗓️ Período: {titulo}
+
+📦 ESTADOS:
+{estados_txt}
+
+✅ CUMPLIMIENTO SLA: {sla_pct:.1f}%
+   ({sla_ok} OK / {sla_mal} incumplidos de {sla_total} cerrados)
+
+⏱️ TIEMPO PROM. RESOLUCIÓN: {avg_h:.1f} horas
+
+🏆 TOP AGENTES:
+{agentes_txt}
+
+💡 Usa: /reporte hoy | semana | mes
+"""
+        await update.message.reply_text(msg.strip())
+
+    except Exception as e:
+        print(f"❌ Error generando reporte: {e}")
+        await update.message.reply_text("⚠️ Error al generar el reporte. Inténtalo de nuevo.")
+    finally:
+        cur.close()
+        conn.close()
+# =========================
 # MAIN
 # =========================
 
@@ -370,6 +458,7 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     app.add_handler(CommandHandler("proceso", proceso))
     app.add_handler(CommandHandler("cerrar", cerrar))
+    app.add_handler(CommandHandler("reporte", reporte))
 
     print("BOT ACTIVO")
 
