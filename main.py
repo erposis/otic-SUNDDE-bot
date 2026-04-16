@@ -260,14 +260,14 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
 
         # 5. Notificaciones
         text = f"""
-🆕 TICKET #{ticket_id}
-Estado: {estado_icono(estado)} {estado}
-Asignado: {asignado_a_nuevo}
-{f"Cerrado por: {cerrado_por_nuevo}\n" if estado == "CERRADO" else ""}
-👤 Usuario: {usuario_nombre}
-🧩 Tipo: {tipo} | 🏢 Piso: {piso} | 🖥 Sistema: {sistema}
-📝 {descripcion}
-"""
+        🆕 TICKET #{ticket_id}
+        Estado: {estado_icono(estado)} {estado}
+        Asignado: {asignado_a_nuevo}
+        {f"Cerrado por: {cerrado_por_nuevo}\n" if estado == "CERRADO" else ""}
+        👤 Usuario: {usuario_nombre}
+        🧩 Tipo: {tipo} | 🏢 Piso: {piso} | 🖥 Sistema: {sistema}
+        📝 {descripcion}
+        """
         try:
             await context.bot.edit_message_text(chat_id=GROUP_ID, message_id=message_id, text=text.strip())
         except BadRequest:
@@ -276,12 +276,13 @@ Asignado: {asignado_a_nuevo}
         await context.bot.send_message(usuario_id, f"📢 Tu ticket #{ticket_id} está: {estado}")
         await update.message.reply_text(f"✅ Ticket #{ticket_id} -> {estado}")
 
-    except Exception as e:
+        except Exception as e:
         print(f"❌ Error cambiando estado: {e}")
         await update.message.reply_text("❌ Error al actualizar. Inténtalo de nuevo.")
-    finally:
+        finally:
         cur.close()
         conn.close()
+    
 # =========================
 # COMANDOS
 # =========================
