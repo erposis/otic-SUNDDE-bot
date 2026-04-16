@@ -260,7 +260,9 @@ async def cambiar_estado(update: Update, context: ContextTypes.DEFAULT_TYPE, est
 Estado: {estado_icono(estado)} {estado}
 Asignado: {asignado_a_nuevo}{cierre_info}
 👤 Usuario: {usuario_nombre}
-🧩 Tipo: {tipo} | 🏢 Piso: {piso} | 🖥 Sistema: {sistema}
+🧩 Tipo: {tipo}
+🏢 Piso: {piso}
+🖥 Sistema: {sistema}
 📝 {descripcion}
 """
         # 5. Actualizar mensaje en grupo
